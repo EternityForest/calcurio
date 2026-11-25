@@ -1,0 +1,12 @@
+import type { CalculatorDefinition } from '../../framework/types.js';
+import { add } from './add.js';
+import { divide } from './divide.js';
+import { multiply } from './multiply.js';
+import { subtract } from './subtract.js';
+
+export const calculators: readonly CalculatorDefinition[] = [
+  add,
+  subtract,
+  multiply,
+  divide,
+];

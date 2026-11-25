@@ -31,10 +31,7 @@ export type DensityUnit = 'kg/m3' | 'g/cm3' | 'g/mL' | 'kg/L' | 'lb/ft3';
 
 /** Units for the specific heat capacity measure. */
 export type SpecificHeatUnit =
-  | 'J/(kg·K)'
-  | 'kJ/(kg·K)'
-  | 'cal/(g·°C)'
-  | 'Btu/(lb·°F)';
+  'J/(kg·K)' | 'kJ/(kg·K)' | 'cal/(g·°C)' | 'Btu/(lb·°F)';
 
 /** Units for the thermal conductivity measure. */
 export type ThermalConductivityUnit = 'W/(m·K)' | 'Btu/(h·ft·°F)';
@@ -239,15 +236,24 @@ const density: Measure<SystemName, DensityUnit> = {
   systems: {
     SI: {
       'kg/m3': {
-        name: { singular: 'Kilogram per cubic metre', plural: 'Kilograms per cubic metre' },
+        name: {
+          singular: 'Kilogram per cubic metre',
+          plural: 'Kilograms per cubic metre',
+        },
         to_anchor: 1,
       },
       'g/cm3': {
-        name: { singular: 'Gram per cubic centimetre', plural: 'Grams per cubic centimetre' },
+        name: {
+          singular: 'Gram per cubic centimetre',
+          plural: 'Grams per cubic centimetre',
+        },
         to_anchor: 1e3,
       },
       'g/mL': {
-        name: { singular: 'Gram per millilitre', plural: 'Grams per millilitre' },
+        name: {
+          singular: 'Gram per millilitre',
+          plural: 'Grams per millilitre',
+        },
         to_anchor: 1e3,
       },
       'kg/L': {
@@ -255,7 +261,10 @@ const density: Measure<SystemName, DensityUnit> = {
         to_anchor: 1e3,
       },
       'lb/ft3': {
-        name: { singular: 'Pound per cubic foot', plural: 'Pounds per cubic foot' },
+        name: {
+          singular: 'Pound per cubic foot',
+          plural: 'Pounds per cubic foot',
+        },
         to_anchor: 16.018463373960142,
       },
     },
@@ -266,19 +275,31 @@ const specificHeat: Measure<SystemName, SpecificHeatUnit> = {
   systems: {
     SI: {
       'J/(kg·K)': {
-        name: { singular: 'Joule per kilogram kelvin', plural: 'Joules per kilogram kelvin' },
+        name: {
+          singular: 'Joule per kilogram kelvin',
+          plural: 'Joules per kilogram kelvin',
+        },
         to_anchor: 1,
       },
       'kJ/(kg·K)': {
-        name: { singular: 'Kilojoule per kilogram kelvin', plural: 'Kilojoules per kilogram kelvin' },
+        name: {
+          singular: 'Kilojoule per kilogram kelvin',
+          plural: 'Kilojoules per kilogram kelvin',
+        },
         to_anchor: 1e3,
       },
       'cal/(g·°C)': {
-        name: { singular: 'Calorie per gram degree Celsius', plural: 'Calories per gram degree Celsius' },
+        name: {
+          singular: 'Calorie per gram degree Celsius',
+          plural: 'Calories per gram degree Celsius',
+        },
         to_anchor: 4184,
       },
       'Btu/(lb·°F)': {
-        name: { singular: 'British thermal unit per pound degree Fahrenheit', plural: 'British thermal units per pound degree Fahrenheit' },
+        name: {
+          singular: 'British thermal unit per pound degree Fahrenheit',
+          plural: 'British thermal units per pound degree Fahrenheit',
+        },
         to_anchor: 4186.8,
       },
     },
@@ -289,11 +310,17 @@ const thermalConductivity: Measure<SystemName, ThermalConductivityUnit> = {
   systems: {
     SI: {
       'W/(m·K)': {
-        name: { singular: 'Watt per metre kelvin', plural: 'Watts per metre kelvin' },
+        name: {
+          singular: 'Watt per metre kelvin',
+          plural: 'Watts per metre kelvin',
+        },
         to_anchor: 1,
       },
       'Btu/(h·ft·°F)': {
-        name: { singular: 'British thermal unit per hour foot degree Fahrenheit', plural: 'British thermal units per hour foot degree Fahrenheit' },
+        name: {
+          singular: 'British thermal unit per hour foot degree Fahrenheit',
+          plural: 'British thermal units per hour foot degree Fahrenheit',
+        },
         to_anchor: 1.730735,
       },
     },
@@ -335,7 +362,10 @@ const thermalExpansion: Measure<SystemName, ThermalExpansionUnit> = {
         to_anchor: 1,
       },
       '1/°F': {
-        name: { singular: 'Per degree Fahrenheit', plural: 'Per degree Fahrenheit' },
+        name: {
+          singular: 'Per degree Fahrenheit',
+          plural: 'Per degree Fahrenheit',
+        },
         to_anchor: 1.8,
       },
     },
@@ -388,6 +418,22 @@ export function convertUnit(
 /** Lists every unit of the same kind as `unit`. */
 export function unitsOfKind(unit: UnitSymbol): UnitSymbol[] {
   return [...convert().from(unit).possibilities()];
+}
+
+/** Every unit the framework knows, grouped by the measurement it measures. */
+export function unitsByMeasure(): ReadonlyMap<
+  MeasureName,
+  readonly UnitSymbol[]
+> {
+  const grouped = new Map<MeasureName, UnitSymbol[]>();
+  for (const name of convert().measures()) {
+    if (!MEASURE_NAMES.has(name)) {
+      continue;
+    }
+    const units = convert().possibilities(name) as UnitSymbol[];
+    grouped.set(name as MeasureName, units);
+  }
+  return grouped;
 }
 
 /** Returns the measurement kind, such as "voltage" or "resistance". */

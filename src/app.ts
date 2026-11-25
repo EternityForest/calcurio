@@ -7,6 +7,11 @@ export const CATEGORY_MANIFEST = {
     description: 'Everyday electrical calculations.',
     load: () => import('./categories/basic/index.js'),
   },
+  math: {
+    title: 'Math',
+    description: 'Add, subtract, multiply, and divide numbers.',
+    load: () => import('./categories/math/index.js'),
+  },
   wire: {
     title: 'Wire',
     description: 'Wire sizes, conductor metals, and resistance.',
@@ -26,6 +31,12 @@ export const CATEGORY_MANIFEST = {
     title: 'Conversions',
     description: 'Everyday unit conversions between equivalent measures.',
     load: () => import('./categories/conversions/index.js'),
+  },
+  custom: {
+    title: 'Custom',
+    description: 'Build your own multistep calculators.',
+    load: () => import('./categories/custom/index.js'),
+    hub: 'calc-custom-hub',
   },
 } as const satisfies CategoryManifest;
 

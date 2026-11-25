@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CalculatorRuntime } from '../../framework/runtime.js';
 import { assertCalculatorTests } from '../../framework/testing.js';
-import { isTableSelectVariable } from '../../framework/types.js';
+import { isNumberVariable } from '../../framework/types.js';
 import { lengthConversion } from './length.js';
 import { speedConversion } from './speed.js';
 import { temperatureConversion } from './temperature.js';
@@ -21,8 +21,8 @@ describe('Conversions', () => {
     for (const definition of CALCULATORS) {
       expect(() => assertCalculatorTests(definition)).not.toThrow();
       for (const variable of definition.variables) {
-        expect(isTableSelectVariable(variable)).toBe(false);
-        if (isTableSelectVariable(variable)) {
+        expect(isNumberVariable(variable)).toBe(true);
+        if (!isNumberVariable(variable)) {
           continue;
         }
         expect(variable.equivalent).toBeDefined();

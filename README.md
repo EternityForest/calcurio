@@ -83,6 +83,22 @@ src/
     weight.ts           kilograms, pounds, ounces
     speed.ts            km/h, mph, ft/s, m/s
     index.ts            category module entry
+  categories/math/      arithmetic primitives
+    arithmetic.ts       shared operand builder and "slots" config
+    add.ts              sum of two to ten values
+    subtract.ts         difference of two values
+    multiply.ts         product of two to ten values
+    divide.ts           quotient of two values
+    index.ts            category module entry
+  categories/custom/    user-built multistep calculations
+    library.ts          keeps registered calculators in step with storage
+    hub.ts              lists saved customs, opens creator and importer
+    editor.ts           edits one custom's steps
+    step-dialog.ts      edits a step's settings, wiring, and visibility
+    browser-dialog.ts   picks a catalog calculator to embed
+    import-dialog.ts    pastes or chooses exported JSON
+    export-dialog.ts    shows a custom as copyable JSON
+    index.ts            category module entry
   categories/spice/     ngspice-backed transient simulations
     circuit.ts          netlist builder (pure data)
     rawfile.ts          binary rawfile parser
@@ -94,6 +110,14 @@ src/
     chart.ts            Chart.js graph of the waveforms
     inrush.ts           inrush transient calculator definition
     index.ts            category module entry
+  custom/               the custom-calculator model (pure data)
+    types.ts            step kinds, wires, and wire paths
+    catalog.ts          embeddable calculators and their tables
+    steps.ts            config helpers, field lists, and wire options
+    validate.ts         custom, wire, and table validation
+    compile.ts          custom definition -> CalculatorDefinition
+    serialize.ts        JSON export and import
+    store.ts            localStorage persistence
   app.ts                category manifest and app singleton
   main.ts               imports CSS and mounts the widget
 ```
@@ -334,6 +358,39 @@ Because the variables are reflections rather than formulas, these calculators
 have no `computable` values and no test cases; their tests drive the runtime
 directly.
 
+### Math
+
+The **Math** category holds the arithmetic primitives. **Add** and **Multiply**
+each combine two to ten values, with a `slots` config field choosing how many
+operands appear; **Subtract** and **Divide** always take exactly two. They use
+the same `buildVariables` pattern as everything else, so the operand count is a
+setting rather than a fixed field list.
+
+### Custom calculators
+
+The **Custom** category lets a user build multistep calculations without
+writing code. Its hub lists every saved custom and offers the creator and an
+importer. A custom is an ordered list of _steps_, each an instance of any
+catalog calculator — or a standalone numeric or text output — with its own
+settings and starting values. A step field may **take from** one field of an
+earlier step, and its value may feed any number of later fields; the editor
+shows a wired field with the `highlight` style and names where it came from. A
+field with a source is read-only, wires must join matching units (or the same
+table), and each step can be marked hidden so it stays out of the running view.
+
+A custom compiles to an ordinary `CalculatorDefinition`: each step contributes
+its variables under a namespaced name and every wire becomes a `takeFrom` link,
+which the runtime already refines to a fixed point. Solving a custom therefore
+reuses the same compute-order and convergence machinery as a built-in
+calculator. Because the variable list of a step comes from its config, a
+custom's shape depends only on that config, never on the values themselves.
+
+Customs live in the `calcurio.customs.v1` localStorage entry. They can be
+exported as JSON to copy or download and re-imported from pasted text or a
+file, so a custom can be shared on a forum and pasted back in. The model
+(types, catalog, validation, compile, serialization, storage) is in
+`src/custom`; the builder UI is in `src/categories/custom`.
+
 ### Adding a category
 
 1. Create `src/categories/<id>/index.ts` exporting `{ calculators }` (and,
@@ -351,6 +408,11 @@ export const CATEGORY_MANIFEST = {
   // ...
 } as const satisfies CategoryManifest;
 ```
+
+A category whose calculators are created by the user at runtime sets `hub` to
+the tag name of an element the category module defines (the Custom category
+uses `calc-custom-hub`). The app renders that element in place of the tile list
+and binds its `handle`, `openCalculator`, and `onChanged` properties.
 
 You can also register a calculator directly at runtime with
 `app.categories.basic.add(definition)`.

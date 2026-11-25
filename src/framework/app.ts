@@ -99,6 +99,31 @@ export class CategoryHandle {
     return registered;
   }
 
+  /**
+   * Registers a calculator, replacing any existing one with the same id. Used
+   * by categories whose calculator list is built and edited at runtime, so an
+   * unrelated calculator keeps its identity and open values.
+   */
+  upsert(definition: CalculatorDefinition): RegisteredCalculator {
+    validateCalculatorDefinition(definition);
+    const existing = this.calculatorsById.get(definition.id);
+    if (existing !== undefined && existing.definition === definition) {
+      return existing;
+    }
+    const registered: RegisteredCalculator = {
+      definition,
+      categoryId: this.id,
+      globalId: globalIdFor(this.id, definition.id),
+    };
+    this.calculatorsById.set(definition.id, registered);
+    return registered;
+  }
+
+  /** Removes a calculator by id, reporting whether one was registered. */
+  remove(calculatorId: string): boolean {
+    return this.calculatorsById.delete(calculatorId);
+  }
+
   get(calculatorId: string): RegisteredCalculator | undefined {
     return this.calculatorsById.get(calculatorId);
   }

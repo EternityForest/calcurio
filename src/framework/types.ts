@@ -17,6 +17,18 @@ export interface VariableBase {
   readonly label: string;
   /** Whether the user may type or select a value. Defaults to true. */
   readonly editable?: boolean;
+  /**
+   * Name of another variable in the same calculator that supplies this one's
+   * value. A wired variable is read-only and follows its source. Its unit must
+   * measure the same kind as the source, and two table selects joined by a
+   * wire must select from the same table.
+   */
+  readonly takeFrom?: string;
+  /**
+   * Names of other variables in the same calculator that this one's value is
+   * sent to. The value flows to every target when the state is computed.
+   */
+  readonly sendTo?: readonly string[];
 
   /**
    * Whether a change to this value should start another round of
@@ -24,6 +36,12 @@ export interface VariableBase {
    * should not destabilize the compute order.
    */
   readonly input?: boolean;
+  /**
+   * Whether the field is left out of the calculator's visible fields. A hidden
+   * variable still takes part in computation; only its field is suppressed.
+   * Defaults to false.
+   */
+  readonly hidden?: boolean;
   /** Explanation shown under the field. */
   readonly description?: string;
   /** Returns a message (or messages) when the value is not acceptable. */
@@ -91,9 +109,28 @@ export interface TableSelectVariableDefinition extends VariableBase {
   readonly default?: string;
 }
 
-/** One value in a calculator: numeric, or a table row selection. */
+/**
+ * A free text value. Unlike a number it carries no unit, and unlike a table
+ * select it is not tied to a table. Used for labels and other string outputs
+ * a calculator produces.
+ */
+export interface TextVariableDefinition extends VariableBase {
+  /**
+   * Computes the text from the state, or returns `missing([...])` when the
+   * inputs it needs are not available. Omit for a plain text input.
+   */
+  readonly computable?: (
+    state: Readonly<CalcState>,
+  ) => string | MissingValue | UnchangedValue;
+  /** Text the variable starts with when no value has been stored yet. */
+  readonly default?: string;
+}
+
+/** One value in a calculator: numeric, text, or a table row selection. */
 export type VariableDefinition =
-  NumberVariableDefinition | TableSelectVariableDefinition;
+  | NumberVariableDefinition
+  | TableSelectVariableDefinition
+  | TextVariableDefinition;
 
 /** Narrows a variable to a table-select dropdown. */
 export function isTableSelectVariable(
@@ -107,6 +144,20 @@ export function isTableFieldVariable(
   variable: NumberVariableDefinition,
 ): boolean {
   return variable.tableSelect !== undefined;
+}
+
+/** Narrows a variable to a free text value. */
+export function isTextVariable(
+  variable: VariableDefinition,
+): variable is TextVariableDefinition {
+  return !('table' in variable) && !('unit' in variable);
+}
+
+/** Narrows a variable to a numeric value with a unit. */
+export function isNumberVariable(
+  variable: VariableDefinition,
+): variable is NumberVariableDefinition {
+  return 'unit' in variable;
 }
 
 /** A cell value in a table row. */
@@ -173,13 +224,50 @@ export interface TableResolver {
   getTable(id: string): TableDefinition | undefined;
 }
 
+/** A primitive value a config field can hold. */
+export type ConfigValue = number | string | boolean;
+
+/** A calculator's current settings, keyed by config field name. */
+export type CalculatorConfig = Readonly<Record<string, ConfigValue>>;
+
+/**
+ * One user-adjustable setting that shapes a calculator's variable list. Config
+ * is fixed when the calculator is built: the number and identity of variables
+ * may depend on it, but never on the runtime values themselves.
+ */
+export interface ConfigFieldDefinition {
+  readonly name: string;
+  readonly label: string;
+  readonly kind: 'number' | 'string' | 'boolean' | 'select';
+  readonly description?: string;
+  /** Value used when the caller supplies none. */
+  readonly default: ConfigValue;
+  /** Choices for a `select` field. Ignored for other kinds. */
+  readonly options?: readonly string[];
+  /** Smallest accepted value for a `number` field. */
+  readonly min?: number;
+  /** Largest accepted value for a `number` field. */
+  readonly max?: number;
+}
+
 /** A calculator is pure data; all UI lives elsewhere. */
 export interface CalculatorDefinition {
   /** URL-safe identifier, unique within its category. */
   readonly id: string;
   readonly title: string;
   readonly description?: string;
+  /** Variables for the default config. */
   readonly variables: readonly VariableDefinition[];
+  /** Settings a caller may adjust before the variable list is built. */
+  readonly config?: readonly ConfigFieldDefinition[];
+  /**
+   * Builds the variable list for a config. Omit for a calculator whose
+   * variables never change. The result must use the same names the config
+   * keeps stable so values survive a config change.
+   */
+  readonly buildVariables?: (
+    config: CalculatorConfig,
+  ) => readonly VariableDefinition[];
   /** Complete states used to verify that every computable variable can be
    * solved for. Values are expressed in each variable's base unit. */
   readonly testCases?: readonly Readonly<CalcState>[];
@@ -208,6 +296,12 @@ export interface CategoryManifestEntry {
   readonly title: string;
   readonly description: string;
   readonly load: () => Promise<CategoryModule>;
+  /**
+   * Tag name of the element that lists this category's calculators in place
+   * of the usual tiles. Use it for categories whose calculators are created
+   * by the user at runtime. The category module must define the element.
+   */
+  readonly hub?: string;
 }
 
 /** Manifest of every category the widget knows how to load. */

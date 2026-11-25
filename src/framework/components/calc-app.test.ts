@@ -53,6 +53,19 @@ function button(element: CalcApp, testId: string): HTMLButtonElement {
   return found;
 }
 
+/** A stand-in hub element, to check how the app renders a manifest hub. */
+class TestHub extends HTMLElement {
+  declare handle: unknown;
+  declare openCalculator: ((calculatorId: string) => void) | undefined;
+  declare onChanged: (() => void) | undefined;
+
+  connectedCallback(): void {
+    this.textContent = 'hub content';
+  }
+}
+
+customElements.define('test-hub', TestHub);
+
 describe('CalcApp', () => {
   afterEach(() => {
     document.body.replaceChildren();
@@ -201,9 +214,33 @@ describe('CalcApp', () => {
 
     button(element, 'category-basic').click();
     await vi.waitFor(() => {
-      expect(element.textContent).toContain(
-        'Nothing in this category yet.',
-      );
+      expect(element.textContent).toContain('Nothing in this category yet.');
     });
+  });
+
+  it('renders a category hub in place of its tiles', async () => {
+    const element = await mount({
+      custom: {
+        title: 'Custom',
+        description: 'Build your own.',
+        load: async () => moduleWith(),
+        hub: 'test-hub',
+      },
+    });
+
+    button(element, 'category-custom').click();
+    await vi.waitFor(() => {
+      expect(element.querySelector('test-hub')).not.toBeNull();
+    });
+
+    const hub = element.querySelector<TestHub>('test-hub');
+    if (hub === null) {
+      throw new Error('Missing hub element.');
+    }
+    expect(element.textContent).toContain('hub content');
+    expect(element.textContent).not.toContain('Nothing in this category yet.');
+    expect(hub.handle).toBeDefined();
+    expect(typeof hub.openCalculator).toBe('function');
+    expect(typeof hub.onChanged).toBe('function');
   });
 });

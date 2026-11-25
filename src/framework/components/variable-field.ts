@@ -21,6 +21,10 @@ interface FieldBase {
   readonly computable: boolean;
   readonly pinned: boolean;
   readonly issues: readonly string[];
+  /** Whether the field is emphasised (its value arrives over a wire). */
+  readonly highlight?: boolean;
+  /** Short note describing where a highlighted value comes from. */
+  readonly sourceNote?: string;
 }
 
 /** A numeric value with a unit selector. */
@@ -44,8 +48,19 @@ export interface TableSelectFieldModel extends FieldBase {
   readonly choices: readonly FieldChoice[];
 }
 
+/** A free text value. */
+export interface TextFieldModel extends FieldBase {
+  readonly kind: 'text';
+  readonly value: string;
+  /** Shown when the field has no value. */
+  readonly placeholder: string;
+}
+
 /** Everything a single value field needs, derived from the runtime. */
-export type FieldModel = NumberFieldModel | TableSelectFieldModel;
+export type FieldModel =
+  | NumberFieldModel
+  | TableSelectFieldModel
+  | TextFieldModel;
 
 /**
  * One labelled value box with a unit selector and an optional Calculate
@@ -113,7 +128,10 @@ export class VariableField extends LitElement {
     ];
 
     return html`
-      <div class="calc-field" data-variable=${model.name}>
+      <div
+        class="calc-field ${model.highlight === true ? 'highlight' : ''}"
+        data-variable=${model.name}
+      >
         <div class="calc-field-header">
           <label class="calc-field-label" for=${this.inputId}>
             ${model.label}
@@ -123,7 +141,14 @@ export class VariableField extends LitElement {
         ${
           model.kind === 'tableSelect'
             ? this.renderSelect(model)
-            : this.renderNumberInput(model)
+            : model.kind === 'text'
+              ? this.renderTextInput(model)
+              : this.renderNumberInput(model)
+        }
+        ${
+          model.sourceNote === undefined || model.sourceNote === ''
+            ? nothing
+            : html`<p class="help calc-field-source">${model.sourceNote}</p>`
         }
         ${
           model.description === ''
@@ -186,6 +211,27 @@ export class VariableField extends LitElement {
           )}
         </select>
         ${this.renderCalculateButton(model)} ${this.renderPlotButton(model)}
+      </div>
+    `;
+  }
+
+  private renderTextInput(model: TextFieldModel): TemplateResult {
+    return html`
+      <div class="calc-field-input">
+        <input
+          id=${this.inputId}
+          class="form-control calc-value-input"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          data-testid=${`value-${model.name}`}
+          ?readonly=${!model.editable}
+          placeholder=${model.placeholder}
+          @input=${this.handleInput}
+          @change=${this.handleChange}
+          @keydown=${this.handleKeydown}
+        />
+        ${this.renderCalculateButton(model)}
       </div>
     `;
   }

@@ -21,20 +21,32 @@ import {
 import type {
   CalcState,
   CalcValue,
+  CalculatorConfig,
   CalculatorDefinition,
+  ConfigFieldDefinition,
+  ConfigValue,
   NumberVariableDefinition,
   TableColumn,
   TableDefinition,
   TableResolver,
   TableSelectVariableDefinition,
+  TextVariableDefinition,
   ValidationIssue,
   VariableDefinition,
 } from './types.js';
-import { isTableFieldVariable, isTableSelectVariable } from './types.js';
+import {
+  isNumberVariable,
+  isTableFieldVariable,
+  isTableSelectVariable,
+  isTextVariable,
+} from './types.js';
 import { isUnchanged } from './unchanged.js';
 import { choicesForUnit, convertUnit, measureOf } from './units.js';
 import type { UnitSymbol } from './units.js';
-import { validateCalculatorDefinition } from './validate.js';
+import {
+  validateCalculatorDefinition,
+  validateVariableList,
+} from './validate.js';
 
 /** Refinement rounds allowed before the runtime reports a cycle. */
 export const MAX_REFINEMENT_ROUNDS = 5;
@@ -153,13 +165,18 @@ export class CalculatorRuntime {
   private readonly choicesByVariable = new Map<string, UnitSymbol[]>();
   private readonly displayUnits = new Map<string, UnitSymbol>();
   private readonly listeners = new Set<RuntimeListener>();
-  private readonly derivedNames: readonly string[];
-  private readonly derivedNameSet: ReadonlySet<string>;
+  private derivedNames: readonly string[] = [];
+  private derivedNameSet: ReadonlySet<string> = new Set<string>();
   private readonly missingNeeds = new Map<string, readonly string[]>();
   private readonly tableSelects = new Map<string, TableSelectBinding>();
   private readonly tableFields = new Map<string, TableFieldBinding>();
   private readonly tableFieldsBySelect = new Map<string, TableFieldBinding[]>();
-  private readonly equivalentGroups: readonly (readonly string[])[];
+  private equivalentGroups: readonly (readonly string[])[] = [];
+
+  /** Settings the variable list was built from. */
+  private configValues: CalculatorConfig;
+  /** Variables for the current config; may differ from the definition. */
+  private variableList: readonly VariableDefinition[] = [];
 
   private values: CalcState = {};
   private pinnedNames = new Set<string>();
@@ -171,34 +188,100 @@ export class CalculatorRuntime {
   private runController: AbortController | null = null;
   private displayItems: OutputDisplayItem[] = [];
 
-  constructor(definition: CalculatorDefinition, tables?: TableResolver) {
+  constructor(
+    definition: CalculatorDefinition,
+    tables?: TableResolver,
+    config?: CalculatorConfig,
+  ) {
     validateCalculatorDefinition(definition);
     this.definition = definition;
     this.tables = tables;
+    this.configValues = resolveConfig(definition, config);
+    this.variableList = buildVariableList(definition, this.configValues);
+    this.bindVariables();
+    this.recompute();
+  }
 
-    for (const variable of definition.variables) {
+  /** Settings the variable list was built from. */
+  get config(): CalculatorConfig {
+    return { ...this.configValues };
+  }
+
+  /** Settings a caller may adjust before the variable list is rebuilt. */
+  get configFields(): readonly ConfigFieldDefinition[] {
+    return this.definition.config ?? [];
+  }
+
+  /**
+   * Applies new settings and rebuilds the variable list. Values and display
+   * units whose names survive the change are kept; the rest are recomputed.
+   */
+  setConfig(patch: CalculatorConfig): void {
+    const next = resolveConfig(this.definition, {
+      ...this.configValues,
+      ...patch,
+    });
+    if (configEquals(next, this.configValues)) {
+      return;
+    }
+    this.cancelComputeState();
+    this.clearDisplay();
+    this.configValues = next;
+    this.variableList = buildVariableList(this.definition, next);
+    this.bindVariables();
+    this.recompute();
+  }
+
+  /**
+   * Rebuilds the variable indexes, table bindings, and compute order from the
+   * current variable list. Values for names that survive are preserved; stale
+   * names are dropped.
+   */
+  private bindVariables(): void {
+    const previousUnits = new Map(this.displayUnits);
+    this.variablesByName.clear();
+    this.choicesByVariable.clear();
+    this.displayUnits.clear();
+    this.tableSelects.clear();
+    this.tableFields.clear();
+    this.tableFieldsBySelect.clear();
+
+    const nextValues: CalcState = {};
+    for (const variable of this.variableList) {
       this.variablesByName.set(variable.name, variable);
-      this.values[variable.name] = this.initialValue(variable);
-      if (!isTableSelectVariable(variable)) {
+      nextValues[variable.name] = Object.hasOwn(this.values, variable.name)
+        ? (this.values[variable.name] ?? null)
+        : this.initialValue(variable);
+      if (isNumberVariable(variable)) {
         this.choicesByVariable.set(variable.name, unitChoicesFor(variable));
-        this.displayUnits.set(variable.name, initialDisplayUnit(variable));
+        this.displayUnits.set(
+          variable.name,
+          previousUnits.get(variable.name) ?? initialDisplayUnit(variable),
+        );
+      }
+    }
+    this.values = nextValues;
+
+    for (const name of [...this.pinnedNames]) {
+      if (!this.variablesByName.has(name)) {
+        this.pinnedNames.delete(name);
+      }
+    }
+    for (const name of [...this.missingNeeds.keys()]) {
+      if (!this.variablesByName.has(name)) {
+        this.missingNeeds.delete(name);
       }
     }
 
-    this.bindTables(tables);
+    this.bindTables(this.tables);
     this.applyTableDefaults();
 
-    this.equivalentGroups = buildEquivalentGroups(definition.variables);
-    this.derivedNames = definition.variables
+    this.equivalentGroups = buildEquivalentGroups(this.variableList);
+    this.derivedNames = this.variableList
       .filter((variable) => this.isDerived(variable))
       .map((variable) => variable.name);
     this.derivedNameSet = new Set(this.derivedNames);
     this.order = [...this.derivedNames];
-    this.recompute();
-  }
-
-  get variables(): readonly VariableDefinition[] {
-    return this.definition.variables;
   }
 
   /** A copy so callers cannot mutate internal state. */
@@ -245,7 +328,7 @@ export class CalculatorRuntime {
     if (!this.hasComputeState || this.isRunning) {
       return false;
     }
-    return this.definition.variables.every((variable) => {
+    return this.variableList.every((variable) => {
       if (this.isComputable(variable.name)) {
         return true;
       }
@@ -256,6 +339,11 @@ export class CalculatorRuntime {
   /** Derived variables in the order they are solved. */
   get computeOrder(): readonly string[] {
     return [...this.order];
+  }
+
+  /** Variables for the current config, in declaration order. */
+  get variables(): readonly VariableDefinition[] {
+    return this.variableList;
   }
 
   variable(name: string): VariableDefinition {
@@ -296,24 +384,43 @@ export class CalculatorRuntime {
     return this.derivedNameSet.has(name);
   }
 
+  /** True when the variable takes its value from another over a wire. */
+  isWired(name: string): boolean {
+    return this.requireVariable(name).takeFrom !== undefined;
+  }
+
+  /** Label of the variable this one takes its value from, or null. */
+  sourceLabel(name: string): string | null {
+    const source = this.requireVariable(name).takeFrom;
+    if (source === undefined) {
+      return null;
+    }
+    return this.variablesByName.get(source)?.label ?? source;
+  }
+
   /**
    * Names of the numeric variables that can be plotted against `axis`: every
-   * other computable variable, excluding table selects which have no number.
+   * other computable variable, excluding text and table selects which have no
+   * number.
    */
   graphTargets(axis: string): readonly string[] {
     this.requireVariable(axis);
-    return this.definition.variables
+    return this.variableList
       .filter(
         (variable) =>
           variable.name !== axis &&
-          !isTableSelectVariable(variable) &&
+          isNumberVariable(variable) &&
           this.isComputable(variable.name),
       )
       .map((variable) => variable.name);
   }
 
   isEditable(name: string): boolean {
-    return this.requireVariable(name).editable !== false;
+    const variable = this.requireVariable(name);
+    if (variable.takeFrom !== undefined) {
+      return false;
+    }
+    return variable.editable !== false;
   }
 
   isPinned(name: string): boolean {
@@ -348,10 +455,10 @@ export class CalculatorRuntime {
     return `Needs ${joinWithAnd(labels)}`;
   }
 
-  /** Display unit for a numeric variable; null for table selects. */
+  /** Display unit for a numeric variable; null for text and table selects. */
   displayUnitFor(name: string): UnitSymbol | null {
     const variable = this.requireVariable(name);
-    if (isTableSelectVariable(variable)) {
+    if (!isNumberVariable(variable)) {
       return null;
     }
     return this.displayUnits.get(name) ?? variable.unit;
@@ -359,7 +466,7 @@ export class CalculatorRuntime {
 
   unitChoices(name: string): readonly UnitSymbol[] {
     const variable = this.requireVariable(name);
-    if (isTableSelectVariable(variable)) {
+    if (!isNumberVariable(variable)) {
       return [];
     }
     return [...(this.choicesByVariable.get(name) ?? [])];
@@ -379,6 +486,9 @@ export class CalculatorRuntime {
     }
 
     const value = this.values[name];
+    if (isTextVariable(variable)) {
+      return typeof value === 'string' ? value : '';
+    }
     if (typeof value !== 'number') {
       return '';
     }
@@ -406,6 +516,11 @@ export class CalculatorRuntime {
     }
     if (!this.isEditable(name)) {
       return { ok: false, message: `${variable.label} is read-only.` };
+    }
+
+    if (isTextVariable(variable)) {
+      this.setValue(name, text);
+      return { ok: true };
     }
 
     let parsed: number | null;
@@ -452,7 +567,7 @@ export class CalculatorRuntime {
   /** Changes display units only; stored values keep their base units. */
   setDisplayUnit(name: string, unit: UnitSymbol): void {
     const variable = this.requireVariable(name);
-    if (isTableSelectVariable(variable)) {
+    if (!isNumberVariable(variable)) {
       throw new RangeError(`${variable.label} does not have a display unit.`);
     }
     const choices = this.choicesByVariable.get(name) ?? [];
@@ -571,6 +686,19 @@ export class CalculatorRuntime {
         if (this.computeVariable(name)) {
           restart = true;
         }
+        /*
+         * Move wired values to their destinations right after each solve, so
+         * a value exported by an earlier step is visible to the later steps
+         * that take from it within the same round. A change still starts
+         * another round, which is what restarts a take-from that reaches an
+         * earlier step.
+         */
+        if (this.applyWires()) {
+          restart = true;
+        }
+      }
+      if (this.applyWires()) {
+        restart = true;
       }
       if (!restart) {
         settled = true;
@@ -595,9 +723,9 @@ export class CalculatorRuntime {
   reset(): void {
     this.cancelComputeState();
     this.clearDisplay();
-    for (const variable of this.definition.variables) {
+    for (const variable of this.variableList) {
       this.values[variable.name] = this.initialValue(variable);
-      if (!isTableSelectVariable(variable)) {
+      if (isNumberVariable(variable)) {
         this.displayUnits.set(variable.name, initialDisplayUnit(variable));
       }
     }
@@ -621,8 +749,8 @@ export class CalculatorRuntime {
     this.clearDisplay();
 
     const displayUnits = new Map<string, UnitSymbol>();
-    for (const variable of this.definition.variables) {
-      if (!isTableSelectVariable(variable)) {
+    for (const variable of this.variableList) {
+      if (isNumberVariable(variable)) {
         displayUnits.set(variable.name, initialDisplayUnit(variable));
       }
     }
@@ -634,9 +762,9 @@ export class CalculatorRuntime {
             `Saved state has unknown variable "${name}".`,
           );
         }
-        if (isTableSelectVariable(variable)) {
+        if (!isNumberVariable(variable)) {
           throw new StateLoadError(
-            `Saved unit for "${name}" is not valid for a table select.`,
+            `Saved unit for "${name}" is not valid for this variable.`,
           );
         }
         if (measureOf(unit) !== measureOf(variable.unit)) {
@@ -731,7 +859,7 @@ export class CalculatorRuntime {
   }
 
   private bindTables(tables: TableResolver | undefined): void {
-    for (const variable of this.definition.variables) {
+    for (const variable of this.variableList) {
       if (!isTableSelectVariable(variable)) {
         continue;
       }
@@ -739,8 +867,8 @@ export class CalculatorRuntime {
       this.tableSelects.set(variable.name, { variable, table });
     }
 
-    for (const variable of this.definition.variables) {
-      if (isTableSelectVariable(variable) || !isTableFieldVariable(variable)) {
+    for (const variable of this.variableList) {
+      if (!isNumberVariable(variable) || !isTableFieldVariable(variable)) {
         continue;
       }
       const selectName = variable.tableSelect;
@@ -798,7 +926,7 @@ export class CalculatorRuntime {
    * it. A default that names no row is ignored.
    */
   private applyTableDefaults(): void {
-    for (const variable of this.definition.variables) {
+    for (const variable of this.variableList) {
       if (!isTableSelectVariable(variable)) {
         continue;
       }
@@ -838,10 +966,16 @@ export class CalculatorRuntime {
   }
 
   private isDerived(variable: VariableDefinition): boolean {
+    if (variable.takeFrom !== undefined) {
+      return true;
+    }
     if (isTableSelectVariable(variable)) {
       return true;
     }
-    return variable.computable !== undefined || isTableFieldVariable(variable);
+    if (variable.computable !== undefined) {
+      return true;
+    }
+    return isNumberVariable(variable) && isTableFieldVariable(variable);
   }
 
   /**
@@ -850,10 +984,17 @@ export class CalculatorRuntime {
    * `applyTableDefaults` later layers a standalone select's default on top.
    */
   private initialValue(variable: VariableDefinition): CalcValue {
+    if (variable.takeFrom !== undefined) {
+      // A wired variable takes its value from its source, not a default.
+      return null;
+    }
     if (isTableSelectVariable(variable)) {
       return null;
     }
-    if (variable.computable !== undefined || isTableFieldVariable(variable)) {
+    if (variable.computable !== undefined) {
+      return null;
+    }
+    if (isNumberVariable(variable) && isTableFieldVariable(variable)) {
       return null;
     }
     return variable.default ?? null;
@@ -863,6 +1004,9 @@ export class CalculatorRuntime {
     const variable = this.requireVariable(name);
     if (isTableSelectVariable(variable)) {
       return this.computeTableSelect(variable);
+    }
+    if (isTextVariable(variable)) {
+      return this.computeText(name, variable);
     }
     const field = this.tableFields.get(name);
     if (field !== undefined) {
@@ -882,6 +1026,10 @@ export class CalculatorRuntime {
   /** True for a variable solved from the state by a `computable` function. */
   private isRecalcVariable(name: string): boolean {
     const variable = this.requireVariable(name);
+    if (variable.takeFrom !== undefined) {
+      // A wired variable is filled by `applyWires`, not by its computable.
+      return false;
+    }
     if (isTableSelectVariable(variable)) {
       return false;
     }
@@ -931,7 +1079,7 @@ export class CalculatorRuntime {
           typeof value === 'number' &&
           Number.isFinite(value) &&
           variable !== undefined &&
-          !isTableSelectVariable(variable)
+          isNumberVariable(variable)
         ) {
           knownCount += 1;
           source = variable;
@@ -977,6 +1125,36 @@ export class CalculatorRuntime {
     }
   }
 
+  /**
+   * Moves every wired value from its source to its destination, converting
+   * units for numbers. Returns true when any value changed, which starts
+   * another refinement round. `takeFrom` names the source; the source may
+   * carry the matching `sendTo`, but only `takeFrom` drives the transfer.
+   */
+  private applyWires(): boolean {
+    let changed = false;
+    for (const variable of this.variableList) {
+      const sourceName = variable.takeFrom;
+      if (sourceName === undefined) {
+        continue;
+      }
+      const source = this.variablesByName.get(sourceName);
+      if (source === undefined) {
+        continue;
+      }
+      const raw = this.values[sourceName] ?? null;
+      const next = wireValue(source, raw, variable);
+      const current = this.values[variable.name] ?? null;
+      if (nearlyEqual(current, next)) {
+        continue;
+      }
+      this.values[variable.name] = next;
+      this.missingNeeds.delete(variable.name);
+      changed = true;
+    }
+    return changed;
+  }
+
   private computeNumber(
     name: string,
     variable: NumberVariableDefinition,
@@ -1011,6 +1189,43 @@ export class CalculatorRuntime {
 
     const current = this.values[name] ?? null;
     if (nearlyEqual(current, next)) {
+      return false;
+    }
+    this.values[name] = next;
+    return variable.input !== false;
+  }
+
+  private computeText(name: string, variable: TextVariableDefinition): boolean {
+    const computable = variable.computable;
+    if (computable === undefined) {
+      return false;
+    }
+
+    let result: unknown;
+    try {
+      result = computable(Object.freeze({ ...this.values }));
+    } catch (error) {
+      this.addError(`${variable.label} failed: ${errorMessage(error)}`);
+      return false;
+    }
+
+    if (isUnchanged(result)) {
+      return false;
+    }
+
+    let next: CalcValue;
+    if (isMissing(result)) {
+      this.missingNeeds.set(name, [...result.needs]);
+      next = null;
+    } else if (typeof result !== 'string') {
+      this.addError(`${variable.label} produced a non-text value.`);
+      return false;
+    } else {
+      next = result;
+    }
+
+    const current = this.values[name] ?? null;
+    if (current === next) {
       return false;
     }
     this.values[name] = next;
@@ -1157,7 +1372,7 @@ export class CalculatorRuntime {
       return;
     }
     const variable = this.variablesByName.get(name);
-    if (variable === undefined || isTableSelectVariable(variable)) {
+    if (variable === undefined || !isNumberVariable(variable)) {
       return;
     }
     if (variable.equivalent === undefined) {
@@ -1223,9 +1438,26 @@ export class CalculatorRuntime {
    */
   private canCompute(name: string): boolean {
     const variable = this.requireVariable(name);
+    if (variable.takeFrom !== undefined) {
+      return false;
+    }
     if (isTableSelectVariable(variable)) {
       const binding = this.tableSelects.get(name);
       return binding !== undefined && this.deriveSelectionKey(binding) !== null;
+    }
+    if (isTextVariable(variable)) {
+      const compute = variable.computable;
+      if (compute === undefined) {
+        return false;
+      }
+      try {
+        const result: unknown = compute(Object.freeze({ ...this.values }));
+        return (
+          !isUnchanged(result) && !isMissing(result) && typeof result === 'string'
+        );
+      } catch {
+        return false;
+      }
     }
     const field = this.tableFields.get(name);
     if (field !== undefined) {
@@ -1285,6 +1517,10 @@ export class CalculatorRuntime {
     variable: VariableDefinition,
     current: CalcValue,
   ): boolean {
+    if (variable.takeFrom !== undefined) {
+      // A wired value is defined by its source, not by a formula.
+      return false;
+    }
     if (isTableSelectVariable(variable)) {
       const binding = this.tableSelects.get(name);
       if (binding === undefined) {
@@ -1292,6 +1528,27 @@ export class CalculatorRuntime {
       }
       const derived = this.deriveSelectionKey(binding);
       return derived !== null && derived !== current;
+    }
+
+    if (isTextVariable(variable)) {
+      const compute = variable.computable;
+      if (compute === undefined) {
+        return false;
+      }
+      let result: unknown;
+      try {
+        result = compute(Object.freeze({ ...this.values, [name]: null }));
+      } catch {
+        return false;
+      }
+      if (
+        isUnchanged(result) ||
+        isMissing(result) ||
+        typeof result !== 'string'
+      ) {
+        return false;
+      }
+      return current !== result;
     }
 
     const field = this.tableFields.get(name);
@@ -1324,7 +1581,7 @@ export class CalculatorRuntime {
 
   private runValidators(): void {
     const issues: ValidationIssue[] = [];
-    for (const variable of this.definition.variables) {
+    for (const variable of this.variableList) {
       const validate = variable.validate;
       if (validate === undefined) {
         continue;
@@ -1363,7 +1620,7 @@ export class CalculatorRuntime {
         throw new StateLoadError(`Saved state has unknown variable "${key}".`);
       }
     }
-    for (const variable of this.definition.variables) {
+    for (const variable of this.variableList) {
       if (!Object.hasOwn(state, variable.name)) {
         throw new StateLoadError(
           `Saved state is missing variable "${variable.name}".`,
@@ -1382,6 +1639,14 @@ export class CalculatorRuntime {
         ) {
           throw new StateLoadError(
             `Saved value for "${variable.name}" is not a valid table row.`,
+          );
+        }
+        continue;
+      }
+      if (isTextVariable(variable)) {
+        if (typeof value !== 'string') {
+          throw new StateLoadError(
+            `Saved value for "${variable.name}" must be text.`,
           );
         }
         continue;
@@ -1517,7 +1782,7 @@ function buildEquivalentGroups(
     neighbours.set(from, links);
   };
   for (const variable of variables) {
-    if (isTableSelectVariable(variable)) {
+    if (!isNumberVariable(variable)) {
       continue;
     }
     for (const target of Object.keys(variable.equivalent ?? {})) {
@@ -1550,4 +1815,115 @@ function buildEquivalentGroups(
     groups.push(group);
   }
   return groups;
+}
+
+/** Resolves a definition's config, filling defaults for missing entries. */
+function resolveConfig(
+  definition: CalculatorDefinition,
+  config: CalculatorConfig | undefined,
+): CalculatorConfig {
+  const resolved: Record<string, ConfigValue> = {};
+  for (const field of definition.config ?? []) {
+    resolved[field.name] = normalizeConfigValue(field, config?.[field.name]);
+  }
+  return resolved;
+}
+
+/** Coerces one provided config value to the field's kind and range. */
+function normalizeConfigValue(
+  field: ConfigFieldDefinition,
+  value: ConfigValue | undefined,
+): ConfigValue {
+  switch (field.kind) {
+    case 'number': {
+      const fallback = typeof field.default === 'number' ? field.default : 0;
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return clampToRange(fallback, field);
+      }
+      return clampToRange(value, field);
+    }
+    case 'boolean':
+      return typeof value === 'boolean' ? value : field.default === true;
+    case 'select': {
+      const options = field.options ?? [];
+      if (typeof value === 'string' && options.includes(value)) {
+        return value;
+      }
+      const fallback = String(field.default ?? '');
+      return options.includes(fallback) ? fallback : (options[0] ?? '');
+    }
+    case 'string':
+      return typeof value === 'string' ? value : String(field.default ?? '');
+  }
+}
+
+function clampToRange(value: number, field: ConfigFieldDefinition): number {
+  let bounded = value;
+  if (field.min !== undefined && bounded < field.min) {
+    bounded = field.min;
+  }
+  if (field.max !== undefined && bounded > field.max) {
+    bounded = field.max;
+  }
+  return bounded;
+}
+
+/**
+ * Builds the variable list for a config. When the definition supplies a
+ * builder its result is validated here; a plain definition reuses the list it
+ * already declares.
+ */
+function buildVariableList(
+  definition: CalculatorDefinition,
+  config: CalculatorConfig,
+): readonly VariableDefinition[] {
+  const build = definition.buildVariables;
+  if (build === undefined) {
+    return definition.variables;
+  }
+  let variables: readonly VariableDefinition[];
+  try {
+    variables = build(config);
+  } catch (error) {
+    throw new CalculatorDefinitionError(
+      `${definition.title} could not build its variables: ` +
+        `${errorMessage(error)}`,
+    );
+  }
+  validateVariableList(variables);
+  return variables;
+}
+
+/** True when two configs hold the same entries. */
+function configEquals(
+  left: CalculatorConfig,
+  right: CalculatorConfig,
+): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Converts a source value for transport over a wire. Numbers are converted
+ * from the source's base unit into the destination's; text and table keys are
+ * copied unchanged (two wired selects are required to share a table).
+ */
+function wireValue(
+  source: VariableDefinition,
+  raw: CalcValue,
+  target: VariableDefinition,
+): CalcValue {
+  if (
+    typeof raw === 'number' &&
+    isNumberVariable(source) &&
+    isNumberVariable(target)
+  ) {
+    return convertUnit(raw, source.unit, target.unit);
+  }
+  return raw;
 }

@@ -19,6 +19,16 @@ export class TableDefinitionError extends Error {
 }
 
 /**
+ * Raised when a custom-calculator definition cannot be used safely.
+ */
+export class CustomDefinitionError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'CustomDefinitionError';
+  }
+}
+
+/**
  * Raised when a saved state cannot be applied to a calculator.
  */
 export class StateLoadError extends Error {
@@ -35,6 +45,16 @@ export class BookmarkStorageError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = 'BookmarkStorageError';
+  }
+}
+
+/**
+ * Raised when custom-calculator storage is unreadable or unwritable.
+ */
+export class CustomStorageError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'CustomStorageError';
   }
 }
 

@@ -1,5 +1,6 @@
 import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
+import { html as staticHtml, unsafeStatic } from 'lit/static-html.js';
 import { BookmarkStore, browserLocalStorage } from '../bookmarks.js';
 import type {
   CalculatorApp,
@@ -8,9 +9,15 @@ import type {
 } from '../app.js';
 import { errorMessage } from '../errors.js';
 import { CalculatorRuntime } from '../runtime.js';
-import type { CategoryManifest } from '../types.js';
+import type { CalculatorDefinition, CategoryManifest } from '../types.js';
 import './calculator-view.js';
 import './table-view.js';
+
+/** A cached runtime together with the definition it was built from. */
+interface CachedRuntime {
+  readonly definition: CalculatorDefinition;
+  readonly runtime: CalculatorRuntime;
+}
 
 type View =
   | { readonly kind: 'categories' }
@@ -42,7 +49,7 @@ export class CalcApp extends LitElement {
   private loadError = '';
   private bookmarkStore: BookmarkStore | null = null;
   private bookmarksInitialized = false;
-  private readonly runtimes = new Map<string, CalculatorRuntime>();
+  private readonly runtimes = new Map<string, CachedRuntime>();
 
   override createRenderRoot(): HTMLElement {
     return this;
@@ -87,8 +94,7 @@ export class CalcApp extends LitElement {
     if (this.view.kind === 'categories') {
       return nothing;
     }
-    const label =
-      this.view.kind === 'category' ? 'All categories' : 'Back';
+    const label = this.view.kind === 'category' ? 'All categories' : 'Back';
     const target: View =
       this.view.kind === 'category'
         ? { kind: 'categories' }
@@ -120,11 +126,7 @@ export class CalcApp extends LitElement {
           this.view.calculatorId,
         );
       case 'table':
-        return this.renderTable(
-          app,
-          this.view.categoryId,
-          this.view.tableId,
-        );
+        return this.renderTable(app, this.view.categoryId, this.view.tableId);
     }
   }
 
@@ -187,14 +189,36 @@ export class CalcApp extends LitElement {
       `;
     }
 
+    const hubTag = app.manifest[categoryId]?.hub;
+    if (hubTag !== undefined) {
+      return html`<p class="help">${handle.description}</p>
+        ${this.renderHub(handle, hubTag)}`;
+    }
+
     if (handle.calculators.length === 0 && handle.tables.length === 0) {
       return html` <p class="help">Nothing in this category yet.</p> `;
     }
 
     return html`
       <p class="help">${handle.description}</p>
-      ${this.renderCalculatorTiles(handle)}
-      ${this.renderTableTiles(handle)}
+      ${this.renderCalculatorTiles(handle)} ${this.renderTableTiles(handle)}
+    `;
+  }
+
+  /**
+   * Renders a category's hub element. The manifest names the tag; it is
+   * defined by the category module, which has loaded by the time we get here.
+   * A hub owns its own list and asks the app to re-render through `onChanged`.
+   */
+  private renderHub(handle: CategoryHandle, tag: string): TemplateResult {
+    const element = unsafeStatic(tag);
+    return staticHtml`
+      <${element}
+        .handle=${handle}
+        .openCalculator=${(calculatorId: string) =>
+          this.openCalculator(handle.id, calculatorId)}
+        .onChanged=${() => this.requestUpdate()}
+      ></${element}>
     `;
   }
 
@@ -214,10 +238,7 @@ export class CalcApp extends LitElement {
               type="button"
               data-testid="calculator-${registered.definition.id}"
               @click=${() =>
-                this.openCalculator(
-                  handle.id,
-                  registered.definition.id,
-                )}
+                this.openCalculator(handle.id, registered.definition.id)}
             >
               <strong>${registered.definition.title}</strong>
               ${
@@ -303,9 +324,7 @@ export class CalcApp extends LitElement {
   ): TemplateResult {
     const table = app.categories[categoryId]?.getTable(tableId);
     if (table === undefined) {
-      return html`
-        <p class="alert danger">That table is not available.</p>
-      `;
+      return html` <p class="alert danger">That table is not available.</p> `;
     }
     return html` <calc-table-view .table=${table}></calc-table-view> `;
   }
@@ -313,18 +332,26 @@ export class CalcApp extends LitElement {
   /**
    * One runtime per calculator, shared across visits so values survive
    * navigation. Construction problems become a visible error instead of
-   * breaking the widget.
+   * breaking the widget. A runtime is rebuilt only when the definition it
+   * was built from is replaced, so editing one custom leaves the others'
+   * values untouched.
    */
   private runtimeFor(
     handle: CategoryHandle,
     registered: RegisteredCalculator,
   ): CalculatorRuntime {
     const existing = this.runtimes.get(registered.globalId);
-    if (existing !== undefined) {
-      return existing;
+    if (
+      existing !== undefined &&
+      existing.definition === registered.definition
+    ) {
+      return existing.runtime;
     }
     const runtime = new CalculatorRuntime(registered.definition, handle);
-    this.runtimes.set(registered.globalId, runtime);
+    this.runtimes.set(registered.globalId, {
+      definition: registered.definition,
+      runtime,
+    });
     return runtime;
   }
 

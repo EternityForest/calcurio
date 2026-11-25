@@ -12,7 +12,7 @@ import type {
   TableResolver,
   VariableDefinition,
 } from './types.js';
-import { isTableSelectVariable } from './types.js';
+import { isNumberVariable, isTableSelectVariable } from './types.js';
 
 export interface CalculatorTestOptions {
   readonly relativeTolerance?: number;
@@ -104,13 +104,16 @@ export function runCalculatorTests(
 
 /** True for any variable the runtime can derive from the rest of the state. */
 function isSolvable(variable: VariableDefinition): boolean {
+  if (variable.takeFrom !== undefined) {
+    return true;
+  }
   if (isTableSelectVariable(variable)) {
     return true;
   }
-  return (
-    variable.computable !== undefined ||
-    variable.tableSelect !== undefined
-  );
+  if (variable.computable !== undefined) {
+    return true;
+  }
+  return isNumberVariable(variable) && variable.tableSelect !== undefined;
 }
 
 /** Throws a detailed error when any calculator test check fails. */

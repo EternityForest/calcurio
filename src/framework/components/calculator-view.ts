@@ -6,8 +6,9 @@ import { errorMessage } from '../errors.js';
 import type { OutputDisplayItem } from '../output.js';
 import type { CalculatorRuntime, ValueUpdateResult } from '../runtime.js';
 import type { UnitSymbol } from '../units.js';
-import type { VariableDefinition } from '../types.js';
-import { isTableSelectVariable } from '../types.js';
+import type { ConfigFieldDefinition, VariableDefinition } from '../types.js';
+import { isTableSelectVariable, isTextVariable } from '../types.js';
+import { configControl } from './config-control.js';
 import { BookmarksDialog } from './bookmarks-dialog.js';
 import { GraphDialog } from './graph-dialog.js';
 import './variable-field.js';
@@ -83,11 +84,11 @@ export class CalculatorView extends LitElement {
             ? nothing
             : html`<p class="help">${definition.description}</p>`
         }
-        ${this.renderErrors(runtime)}
+        ${this.renderConfig(runtime)} ${this.renderErrors(runtime)}
         <div class="calc-fields">
-          ${definition.variables.map((variable) =>
-            this.renderField(runtime, variable),
-          )}
+          ${runtime.variables
+            .filter((variable) => variable.hidden !== true)
+            .map((variable) => this.renderField(runtime, variable))}
         </div>
         <div class="calc-actions">
           <button
@@ -134,6 +135,44 @@ export class CalculatorView extends LitElement {
     `;
   }
 
+  /** Renders the calculator's settings, which shape its variable list. */
+  private renderConfig(
+    runtime: CalculatorRuntime,
+  ): TemplateResult | typeof nothing {
+    const fields = runtime.configFields;
+    if (fields.length === 0) {
+      return nothing;
+    }
+    return html`
+      <div class="calc-config">
+        <h3 class="calc-section-title">Settings</h3>
+        <div class="calc-config-fields">
+          ${fields.map((field) => this.renderConfigField(runtime, field))}
+        </div>
+      </div>
+    `;
+  }
+
+  private renderConfigField(
+    runtime: CalculatorRuntime,
+    field: ConfigFieldDefinition,
+  ): TemplateResult {
+    const value = runtime.config[field.name];
+    return html`
+      <label class="calc-config-field">
+        <span class="calc-config-label">${field.label}</span>
+        ${configControl(field, value, (next) =>
+          runtime.setConfig({ [field.name]: next }),
+        )}
+      </label>
+      ${
+        field.description === undefined
+          ? nothing
+          : html`<p class="help calc-config-help">${field.description}</p>`
+      }
+    `;
+  }
+
   private renderField(
     runtime: CalculatorRuntime,
     variable: VariableDefinition,
@@ -144,14 +183,18 @@ export class CalculatorView extends LitElement {
     // live choice: the runtime derives it too, so it must not be disabled.
     const output =
       runMode && runtime.isComputable(name) && !isTableSelectVariable(variable);
+    const source = runtime.sourceLabel(name);
     const base = {
       name,
       label: variable.label,
       description: variable.description ?? '',
       editable: runtime.isEditable(name) && !output,
-      computable: runtime.isComputable(name) && !runMode,
+      computable:
+        runtime.isComputable(name) && !runMode && !runtime.isWired(name),
       pinned: runtime.isPinned(name),
       issues: runtime.issuesFor(name).map((issue) => issue.message),
+      highlight: source !== null,
+      ...(source === null ? {} : { sourceNote: `Taken from ${source}` }),
     };
 
     if (isTableSelectVariable(variable)) {
@@ -166,6 +209,22 @@ export class CalculatorView extends LitElement {
           .model=${model}
           .onSelectionChange=${(key: string) =>
             this.selectRow(runtime, name, key)}
+          .onCalculate=${() => runtime.calculate(name)}
+        ></calc-variable-field>
+      `;
+    }
+
+    if (isTextVariable(variable)) {
+      const model: FieldModel = {
+        ...base,
+        kind: 'text',
+        value: runtime.formattedValue(name),
+        placeholder: runtime.missingLabel(name),
+      };
+      return html`
+        <calc-variable-field
+          .model=${model}
+          .onCommit=${(text: string) => runtime.setDisplayText(name, text)}
           .onCalculate=${() => runtime.calculate(name)}
         ></calc-variable-field>
       `;

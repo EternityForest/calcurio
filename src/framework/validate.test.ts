@@ -158,6 +158,52 @@ describe('validateCalculatorDefinition', () => {
     ).toThrow(CalculatorDefinitionError);
   });
 
+  it('accepts a default display unit of the same measure', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          {
+            ...definition.variables[0]!,
+            unit: 'F',
+            defaultDisplayUnit: 'µF',
+          },
+          definition.variables[1]!,
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects an unknown default display unit', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          {
+            ...definition.variables[0]!,
+            defaultDisplayUnit: 'not-a-unit' as UnitSymbol,
+          },
+          definition.variables[1]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a default display unit of a different measure', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          { ...definition.variables[0]!, defaultDisplayUnit: 'A' },
+          definition.variables[1]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
   it('rejects a definition without a computable variable', () => {
     const definition = baseDefinition();
     const withoutComputable = definition.variables.map((variable) => {

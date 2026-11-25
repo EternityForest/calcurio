@@ -240,6 +240,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitance1',
       label: 'Capacitance 1',
       unit: 'F',
+      defaultDisplayUnit: 'µF',
       description: 'Capacitor directly across the load, at zero bias.',
       validate: aboveZero(
         'capacitance1',
@@ -278,6 +279,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitance2',
       label: 'Capacitance 2',
       unit: 'F',
+      defaultDisplayUnit: 'µF',
       description: 'Capacitor behind the damping resistance, at zero bias.',
       validate: aboveZero(
         'capacitance2',

@@ -3,6 +3,10 @@
  * figures for common dielectric and package combinations; the model turns a
  * rated capacitance and voltage rating into the nonlinear capacitance law
  * `C(V) = Csat + (C0 − Csat) / (1 + (|V| / V0)^n)` used by the calculators.
+ *
+ * Package sizes are quoted as imperial (EIA) / metric (IEC), e.g. `0402/1005`,
+ * so the label is unambiguous. The law is fitted to X5R anchors, so the other
+ * class-2 dielectrics are extrapolations of the same shape.
  */
 
 import { booleanCell, findRow, numericCell } from '../framework/tables.js';
@@ -11,15 +15,29 @@ import type { TableDefinition, TableRow } from '../framework/types.js';
 /** Caps the knee voltage at this multiple of the part's voltage rating. */
 const KNEE_VOLTAGE_LIMIT = 1.5;
 
+/**
+ * Empirical DC-bias fit, calibrated against 10 µF / 10 V X5R anchors in 0402,
+ * 0603 and 0805. `density` is the rated capacitance per active cubic
+ * millimetre (µF/mm³): the knee voltage falls as the dielectric packs tighter,
+ * and the residual capacitance it settles to shrinks with it too.
+ */
+const KNEE_SCALE = 2.9;
+const KNEE_DENSITY_EXPONENT = -0.145;
+const RESIDUAL_INTERCEPT = 0.43;
+const RESIDUAL_SLOPE = -0.17;
+const MIN_RESIDUAL = 0.05;
+const MAX_RESIDUAL = 0.9;
+
 export const capacitorTypesTable: TableDefinition = {
   id: 'capacitor-types',
   title: 'Capacitor types',
   description:
     'Approximate DC-bias behaviour of common ceramic and electrolytic ' +
-    'capacitors. The active volume is the ceramic or foil volume that stores ' +
-    'charge; the nonlinear flag selects whether the DC-bias model applies. ' +
-    'The form modifier α_form and knee exponent n shape the capacitance drop ' +
-    'with voltage.',
+    'capacitors. Packages are named imperial/metric, e.g. 0402/1005. The ' +
+    'active volume is the ceramic or foil volume that stores charge; the ' +
+    'nonlinear flag selects whether the DC-bias model applies. The form ' +
+    'modifier α_form and knee exponent n shape the capacitance drop with ' +
+    'voltage.',
   keyColumn: 'id',
   labelColumn: 'label',
   columns: [
@@ -60,7 +78,7 @@ export const capacitorTypesTable: TableDefinition = {
   rows: [
     {
       id: 'c0g-0603',
-      label: '0603 C0G/NP0',
+      label: '0603/1608 C0G/NP0',
       dielectric: 'C0G/NP0',
       volume: 1,
       nonlinear: false,
@@ -70,37 +88,37 @@ export const capacitorTypesTable: TableDefinition = {
     },
     {
       id: 'x5r-0402',
-      label: '0402 X5R',
+      label: '0402/1005 X5R',
       dielectric: 'X5R',
       volume: 0.25,
       nonlinear: true,
       kDiel: 1.8,
       alphaForm: 0.8,
-      kneeN: 2,
+      kneeN: 2.1,
     },
     {
       id: 'x5r-0603',
-      label: '0603 X5R',
+      label: '0603/1608 X5R',
       dielectric: 'X5R',
       volume: 1,
       nonlinear: true,
       kDiel: 1.8,
       alphaForm: 0.85,
-      kneeN: 2,
+      kneeN: 2.1,
     },
     {
       id: 'x5r-0805',
-      label: '0805 X5R',
+      label: '0805/2012 X5R',
       dielectric: 'X5R',
       volume: 3.1,
       nonlinear: true,
       kDiel: 1.8,
       alphaForm: 0.9,
-      kneeN: 2,
+      kneeN: 2.1,
     },
     {
       id: 'x7r-0603',
-      label: '0603 X7R',
+      label: '0603/1608 X7R',
       dielectric: 'X7R',
       volume: 1,
       nonlinear: true,
@@ -110,7 +128,7 @@ export const capacitorTypesTable: TableDefinition = {
     },
     {
       id: 'x7r-0805',
-      label: '0805 X7R',
+      label: '0805/2012 X7R',
       dielectric: 'X7R',
       volume: 3.1,
       nonlinear: true,
@@ -120,7 +138,7 @@ export const capacitorTypesTable: TableDefinition = {
     },
     {
       id: 'x7r-1206',
-      label: '1206 X7R',
+      label: '1206/3216 X7R',
       dielectric: 'X7R',
       volume: 8,
       nonlinear: true,
@@ -130,7 +148,7 @@ export const capacitorTypesTable: TableDefinition = {
     },
     {
       id: 'x8r-1206',
-      label: '1206 X8R',
+      label: '1206/3216 X8R',
       dielectric: 'X8R',
       volume: 8,
       nonlinear: true,
@@ -140,7 +158,7 @@ export const capacitorTypesTable: TableDefinition = {
     },
     {
       id: 'x7t-1210',
-      label: '1210 X7T',
+      label: '1210/3225 X7T',
       dielectric: 'X7T',
       volume: 16,
       nonlinear: true,
@@ -264,10 +282,17 @@ export function resolveCapacitor(
   // dielectric holds. The empirical fit is calibrated in those units.
   const density = (capacitance * 1e6) / type.volume;
   const kneeVoltage = Math.min(
-    type.alphaForm * type.kDiel * Math.pow(density, -0.45),
+    KNEE_SCALE *
+      type.alphaForm *
+      type.kDiel *
+      Math.pow(density, KNEE_DENSITY_EXPONENT),
     KNEE_VOLTAGE_LIMIT * voltageRating,
   );
-  const ratio = clamp(0.18 - 0.04 * Math.log(density), 0.1, 0.45);
+  const ratio = clamp(
+    RESIDUAL_INTERCEPT + RESIDUAL_SLOPE * Math.log(density),
+    MIN_RESIDUAL,
+    MAX_RESIDUAL,
+  );
 
   return {
     nonlinear: true,

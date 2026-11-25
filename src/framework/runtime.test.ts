@@ -164,6 +164,54 @@ describe('CalculatorRuntime', () => {
     expect(runtime.formattedValue('a')).toBe('1');
   });
 
+  it('opens a variable in its default display unit', () => {
+    const definition = doublingDefinition();
+    definition.variables[0] = {
+      ...definition.variables[0]!,
+      unit: 'F',
+      defaultDisplayUnit: 'µF',
+    };
+    const runtime = new CalculatorRuntime(definition);
+    expect(runtime.displayUnitFor('a')).toBe('µF');
+    expect(runtime.setDisplayText('a', '2')).toEqual({ ok: true });
+    expect(runtime.state['a']).toBeCloseTo(2e-6, 15);
+    expect(runtime.formattedValue('a')).toBe('2');
+  });
+
+  it('offers a default display unit missing from unitOptions', () => {
+    const definition = doublingDefinition();
+    definition.variables[0] = {
+      ...definition.variables[0]!,
+      unit: 'F',
+      unitOptions: ['F', 'nF'],
+      defaultDisplayUnit: 'µF',
+    };
+    const runtime = new CalculatorRuntime(definition);
+    expect(runtime.unitChoices('a')).toEqual(['F', 'µF', 'nF']);
+    expect(runtime.displayUnitFor('a')).toBe('µF');
+  });
+
+  it('restores the default display unit on reset and loadState', () => {
+    const definition = doublingDefinition();
+    definition.variables[0] = {
+      ...definition.variables[0]!,
+      unit: 'F',
+      defaultDisplayUnit: 'µF',
+    };
+    const runtime = new CalculatorRuntime(definition);
+    runtime.setDisplayUnit('a', 'nF');
+    runtime.reset();
+    expect(runtime.displayUnitFor('a')).toBe('µF');
+
+    runtime.setDisplayUnit('a', 'nF');
+    runtime.loadState({ a: 2e-6, b: 1e-6, c: null }, { a: 'nF' });
+    expect(runtime.displayUnitFor('a')).toBe('nF');
+
+    const fresh = new CalculatorRuntime(definition);
+    fresh.loadState({ a: 2e-6, b: 1e-6, c: null });
+    expect(fresh.displayUnitFor('a')).toBe('µF');
+  });
+
   it('rejects unavailable or incompatible display units', () => {
     const runtime = new CalculatorRuntime(doublingDefinition());
     expect(() => runtime.setDisplayUnit('a', 'A')).toThrow(RangeError);
@@ -710,9 +758,7 @@ describe('computeState', () => {
 
   it('throws when computeState is missing', async () => {
     const runtime = new CalculatorRuntime(doublingDefinition());
-    await expect(runtime.computeState()).rejects.toThrow(
-      'has no computeState',
-    );
+    await expect(runtime.computeState()).rejects.toThrow('has no computeState');
   });
 });
 

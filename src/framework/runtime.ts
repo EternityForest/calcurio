@@ -30,10 +30,7 @@ import type {
   ValidationIssue,
   VariableDefinition,
 } from './types.js';
-import {
-  isTableFieldVariable,
-  isTableSelectVariable,
-} from './types.js';
+import { isTableFieldVariable, isTableSelectVariable } from './types.js';
 import { isUnchanged } from './unchanged.js';
 import { choicesForUnit, convertUnit, measureOf } from './units.js';
 import type { UnitSymbol } from './units.js';
@@ -127,6 +124,24 @@ export function nearlyEqual(
 }
 
 /**
+ * Units a numeric variable offers, base unit first, then its preferred
+ * display unit when it is not already listed, then the remaining options.
+ */
+function unitChoicesFor(variable: NumberVariableDefinition): UnitSymbol[] {
+  const choices = choicesForUnit(variable.unit, variable.unitOptions);
+  const preferred = variable.defaultDisplayUnit;
+  if (preferred !== undefined && !choices.includes(preferred)) {
+    choices.splice(1, 0, preferred);
+  }
+  return choices;
+}
+
+/** Unit a numeric field starts in: its preferred display unit, or the base. */
+function initialDisplayUnit(variable: NumberVariableDefinition): UnitSymbol {
+  return variable.defaultDisplayUnit ?? variable.unit;
+}
+
+/**
  * Owns the state of one calculator and the rules for recomputing it. No DOM
  * code lives here, so a calculator can be embedded in any UI.
  */
@@ -164,11 +179,8 @@ export class CalculatorRuntime {
       this.variablesByName.set(variable.name, variable);
       this.values[variable.name] = this.initialValue(variable);
       if (!isTableSelectVariable(variable)) {
-        this.choicesByVariable.set(
-          variable.name,
-          choicesForUnit(variable.unit, variable.unitOptions),
-        );
-        this.displayUnits.set(variable.name, variable.unit);
+        this.choicesByVariable.set(variable.name, unitChoicesFor(variable));
+        this.displayUnits.set(variable.name, initialDisplayUnit(variable));
       }
     }
 
@@ -437,9 +449,7 @@ export class CalculatorRuntime {
   setDisplayUnit(name: string, unit: UnitSymbol): void {
     const variable = this.requireVariable(name);
     if (isTableSelectVariable(variable)) {
-      throw new RangeError(
-        `${variable.label} does not have a display unit.`,
-      );
+      throw new RangeError(`${variable.label} does not have a display unit.`);
     }
     const choices = this.choicesByVariable.get(name) ?? [];
     if (!choices.includes(unit)) {
@@ -577,7 +587,7 @@ export class CalculatorRuntime {
     for (const variable of this.definition.variables) {
       this.values[variable.name] = this.initialValue(variable);
       if (!isTableSelectVariable(variable)) {
-        this.displayUnits.set(variable.name, variable.unit);
+        this.displayUnits.set(variable.name, initialDisplayUnit(variable));
       }
     }
     this.pinnedNames = new Set();
@@ -601,7 +611,7 @@ export class CalculatorRuntime {
     const displayUnits = new Map<string, UnitSymbol>();
     for (const variable of this.definition.variables) {
       if (!isTableSelectVariable(variable)) {
-        displayUnits.set(variable.name, variable.unit);
+        displayUnits.set(variable.name, initialDisplayUnit(variable));
       }
     }
     if (units !== undefined) {
@@ -791,10 +801,7 @@ export class CalculatorRuntime {
     if (isTableSelectVariable(variable)) {
       return true;
     }
-    return (
-      variable.computable !== undefined ||
-      isTableFieldVariable(variable)
-    );
+    return variable.computable !== undefined || isTableFieldVariable(variable);
   }
 
   /**
@@ -863,9 +870,7 @@ export class CalculatorRuntime {
     return variable.input !== false;
   }
 
-  private computeTableSelect(
-    variable: TableSelectVariableDefinition,
-  ): boolean {
+  private computeTableSelect(variable: TableSelectVariableDefinition): boolean {
     const binding = this.tableSelects.get(variable.name);
     if (binding === undefined) {
       return false;
@@ -880,10 +885,7 @@ export class CalculatorRuntime {
     return variable.input !== false;
   }
 
-  private computeTableField(
-    name: string,
-    binding: TableFieldBinding,
-  ): boolean {
+  private computeTableField(name: string, binding: TableFieldBinding): boolean {
     const next = this.deriveTableFieldValue(binding);
     if (next === null) {
       return false;
@@ -902,8 +904,9 @@ export class CalculatorRuntime {
    * that currently has a value. No matches or several matches select nothing.
    */
   private deriveSelectionKey(binding: TableSelectBinding): string | null {
-    const constraints = (this.tableFieldsBySelect.get(binding.variable.name) ??
-      [])
+    const constraints = (
+      this.tableFieldsBySelect.get(binding.variable.name) ?? []
+    )
       .map((field) => ({
         field,
         value: this.values[field.variable.name],
@@ -937,9 +940,7 @@ export class CalculatorRuntime {
     return match === undefined ? null : rowKey(binding.table, match);
   }
 
-  private deriveTableFieldValue(
-    binding: TableFieldBinding,
-  ): number | null {
+  private deriveTableFieldValue(binding: TableFieldBinding): number | null {
     const selected = this.tableSelects.get(binding.selectName);
     if (selected === undefined) {
       return null;
@@ -957,9 +958,7 @@ export class CalculatorRuntime {
     }
     const cell = numericCell(row[binding.column.key]);
     if (cell === null) {
-      this.addError(
-        `${binding.column.label} is empty for row "${key}".`,
-      );
+      this.addError(`${binding.column.label} is empty for row "${key}".`);
       return null;
     }
     return convertUnit(cell, binding.columnUnit, binding.variable.unit);

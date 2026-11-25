@@ -20,7 +20,7 @@ function runtime(): CalculatorRuntime {
 function biased(type: string, voltage: string): CalculatorRuntime {
   const rt = runtime();
   rt.setSelection('capacitorType', type);
-  rt.setDisplayText('capacitance', '0.00001');
+  rt.setDisplayText('capacitance', '10');
   rt.setDisplayText('voltageRating', '16');
   rt.setDisplayText('biasVoltage', voltage);
   return rt;

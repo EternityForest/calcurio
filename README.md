@@ -180,7 +180,10 @@ spells the degrees out (`°C` rather than the library's bare `C`) and leaves
 `F` to the farad. The unit selector lists the variable's base unit followed
 by every unit of the same kind, or by `unitOptions` when it is provided.
 Typed values are converted from the selected display unit into the base unit,
-and displayed values are converted back out.
+and displayed values are converted back out. A variable may set
+`defaultDisplayUnit` to open in a different unit of the same kind; the state
+is still stored in `unit`, so the capacitors store farads but start in
+microfarads.
 
 ### Component models
 
@@ -195,13 +198,19 @@ SPICE netlist.
   `L(i) = L∞ + (L0 − L∞) / (1 + (|i| / I_k)^p)`: `L0` is the rated
   inductance, `L∞` the residual inductance left at very high current, `I_k`
   the knee current at which the drop is halfway, and `p` the knee sharpness.
-  Air core never saturates, so its model stays linear.
+  The ΔL column is the fraction of inductance lost at the rated saturation
+  current, so the convention that defines that current (typically a 10–30 %
+  drop, depending on material) must match the datasheet. Air core never
+  saturates, so its model stays linear.
 - `capacitor-types.ts` lists dielectric and package classes (C0G/NP0, X5R,
-  X7R, X8R, X7T, aluminium, tantalum). The DC-bias law is the matching form
-  `C(V) = Csat + (C0 − Csat) / (1 + (|V| / V0)^n)`. Class-2 ceramics lose
-  capacitance as they are biased; the knee voltage `V0` is derived from the
-  part's active volume, dielectric constant k, and a form modifier, then
-  capped at 1.5× the voltage rating. C0G and the electrolytics are linear.
+  X7R, X8R, X7T, aluminium, tantalum). Packages are named imperial/metric
+  (e.g. 0402/1005) so the size is unambiguous. The DC-bias law is the
+  matching form `C(V) = Csat + (C0 − Csat) / (1 + (|V| / V0)^n)`. Class-2
+  ceramics lose capacitance as they are biased; the knee voltage `V0` and
+  the residual `Csat` come from the rated capacitance per active volume, the
+  dielectric constant k, and a form modifier, fitted to 10 µF / 10 V X5R
+  package anchors, with `V0` capped at 1.5× the voltage rating. C0G and the
+  electrolytics are linear.
 
 The inductor tables quote the rated saturation current at 25 °C and a
 derating figure at 100 °C; the temperature inputs interpolate linearly

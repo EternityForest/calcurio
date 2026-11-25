@@ -189,9 +189,7 @@ function validateTableSelect(
   problems: string[],
 ): void {
   if (!isValidIdentifier(variable.table ?? '')) {
-    problems.push(
-      `${where}: table must be a lowercase, hyphenated table id.`,
-    );
+    problems.push(`${where}: table must be a lowercase, hyphenated table id.`);
   }
   if ('unit' in variable) {
     problems.push(`${where}: a table-select variable must not have a unit.`);
@@ -225,6 +223,25 @@ function validateNumberVariable(
     problems.push(`${where}: unknown unit "${variable.unit}".`);
   } else if (variable.unitOptions !== undefined) {
     validateUnitOptions(where, variable.unit, variable.unitOptions, problems);
+  }
+
+  if (variable.defaultDisplayUnit !== undefined) {
+    const description = tryDescribeUnit(variable.defaultDisplayUnit);
+    if (description === null) {
+      problems.push(
+        `${where}: unknown default display unit ` +
+          `"${variable.defaultDisplayUnit}".`,
+      );
+    } else if (
+      baseDescription !== null &&
+      description.measure !== baseDescription.measure
+    ) {
+      problems.push(
+        `${where}: default display unit "${variable.defaultDisplayUnit}" ` +
+          `measures "${description.measure}", expected ` +
+          `"${baseDescription.measure}".`,
+      );
+    }
   }
 
   const hasSelect = variable.tableSelect !== undefined;

@@ -1,8 +1,5 @@
 import { missing } from '../../framework/missing.js';
-import type {
-  CalcState,
-  CalculatorDefinition,
-} from '../../framework/types.js';
+import type { CalcState, CalculatorDefinition } from '../../framework/types.js';
 
 function valueOf(state: Readonly<CalcState>, name: string): number | null {
   const value = state[name];
@@ -19,7 +16,7 @@ export const ohmsLaw: CalculatorDefinition = {
     {
       name: 'voltage',
       label: 'Voltage',
-      unit: 'mV',
+      unit: 'V',
       description: 'Electrical potential difference.',
       computable: (state) => {
         const current = valueOf(state, 'current');
@@ -36,7 +33,7 @@ export const ohmsLaw: CalculatorDefinition = {
     {
       name: 'current',
       label: 'Current',
-      unit: 'mA',
+      unit: 'A',
       description: 'Rate of charge flow.',
       computable: (state) => {
         const voltage = valueOf(state, 'voltage');
@@ -83,10 +80,10 @@ export const ohmsLaw: CalculatorDefinition = {
     },
   ],
   testCases: [
-    { voltage: 12000, current: 120, resistance: 100 },
-    { voltage: 5000, current: 10, resistance: 500 },
-    { voltage: -12000, current: -120, resistance: 100 },
-    { voltage: 3300, current: 20, resistance: 165 },
+    { voltage: 12, current: 0.12, resistance: 100 },
+    { voltage: 5, current: 0.01, resistance: 500 },
+    { voltage: -12, current: -0.12, resistance: 100 },
+    { voltage: 3.3, current: 0.02, resistance: 165 },
     { voltage: 3.3, current: 0.001, resistance: 3300 },
   ],
 };

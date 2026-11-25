@@ -39,6 +39,12 @@ export interface NumberVariableDefinition extends VariableBase {
   /** Unit that the internal state is stored in. */
   readonly unit: UnitSymbol;
   /**
+   * Unit the field starts in. Defaults to `unit`, so set it when the value is
+   * stored internally in one unit but is easier to enter in another (farads
+   * stored, microfarads shown). Must measure the same kind as `unit`.
+   */
+  readonly defaultDisplayUnit?: UnitSymbol;
+  /**
    * Units offered in the unit selector. The base unit is always available,
    * even when it is not listed. Defaults to every unit of the same kind.
    */

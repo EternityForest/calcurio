@@ -75,8 +75,7 @@ export interface TableSelectVariableDefinition extends VariableBase {
 
 /** One value in a calculator: numeric, or a table row selection. */
 export type VariableDefinition =
-  | NumberVariableDefinition
-  | TableSelectVariableDefinition;
+  NumberVariableDefinition | TableSelectVariableDefinition;
 
 /** Narrows a variable to a table-select dropdown. */
 export function isTableSelectVariable(
@@ -93,17 +92,29 @@ export function isTableFieldVariable(
 }
 
 /** A cell value in a table row. */
-export type TableCell = string | number | null;
+export type TableCell = string | number | boolean | null;
 
 /** One row of a table, keyed by column key. */
 export type TableRow = Readonly<Record<string, TableCell>>;
 
-/** One column in a table. A column is numeric exactly when it has a unit. */
+/** How a table column stores its cells when it has no unit to imply one. */
+export type TableColumnKind = 'text' | 'number' | 'boolean';
+
+/**
+ * One column in a table. A column is numeric when it has a unit or declares
+ * `kind: "number"`, and stores text otherwise. Declare `kind: "boolean"` for
+ * yes/no flags.
+ */
 export interface TableColumn {
   readonly key: string;
   readonly label: string;
   /** Numeric columns store values in this unit. Omit for text columns. */
   readonly unit?: UnitSymbol;
+  /**
+   * Overrides the cell type implied by `unit`. Use "number" for dimensionless
+   * numeric columns and "boolean" for yes/no flags.
+   */
+  readonly kind?: TableColumnKind;
   readonly description?: string;
 }
 

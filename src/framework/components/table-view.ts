@@ -1,7 +1,7 @@
 import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
 import { formatNumber } from '../format.js';
-import { isNumericColumn } from '../tables.js';
+import { isBooleanColumn, isNumericColumn } from '../tables.js';
 import type { TableCell, TableColumn, TableDefinition } from '../types.js';
 
 /**
@@ -78,6 +78,9 @@ function renderCell(
 ): string | TemplateResult {
   if (cell === null || cell === undefined) {
     return '—';
+  }
+  if (isBooleanColumn(column) && typeof cell === 'boolean') {
+    return cell ? 'yes' : 'no';
   }
   if (isNumericColumn(column) && typeof cell === 'number') {
     return formatNumber(cell);

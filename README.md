@@ -49,14 +49,20 @@ style it, and it uses native `<dialog>` for the bookmark popover.
 src/
   framework/            UI-independent core
     types.ts            CalculatorDefinition, VariableDefinition, CalcState
-    units.ts            convert-units wrapper plus resistance/inductance/capacitance
+    units.ts            convert-units wrapper plus resistance/inductance/capacitance/temperature
     runtime.ts          state, compute order, refinement, validation
+    tables.ts           table registry and validation
     app.ts              category registry and lazy loading
     bookmarks.ts        localStorage persistence
     testing.ts          calculator test-case harness
     components/         Lit elements (app shell, calculator view, fields, dialog)
+  models/               shared component models, with their data tables
+    inductor-types.ts   inductor saturation table and L(i) law
+    capacitor-types.ts  capacitor DC-bias table and C(V) law
   categories/basic/     one lazily loaded category
     ohms-law.ts         calculator definition (pure data)
+    inductance-at-bias.ts       inductance of a part at a current
+    capacitance-at-dc-bias.ts   capacitance of a part at a DC bias
     index.ts            category module entry
   categories/spice/     ngspice-backed transient simulations
     circuit.ts          netlist builder (pure data)
@@ -167,16 +173,51 @@ optional `dispose` runs at that point.
 ### Units
 
 Units come from `convert-units`; Calcurio adds `resistance` (`Ω`, `mΩ`,
-`kΩ`, `MΩ`), `inductance` (`H`, `mH`, `µH`, `nH`) and `capacitance`
-(`F`, `mF`, `µF`, `nF`, `pF`) measures because the library does not ship
-them. The unit selector lists the variable's base unit followed by every unit
-of the same kind, or by `unitOptions` when it is provided. Typed values are
-converted from the selected display unit into the base unit, and displayed
-values are converted back out.
+`kΩ`, `MΩ`), `inductance` (`H`, `mH`, `µH`, `nH`), `capacitance`
+(`F`, `mF`, `µF`, `nF`, `pF`) and `temperature` (`°C`, `K`, `°F`, `°R`)
+measures because the library does not ship them. The temperature measure
+spells the degrees out (`°C` rather than the library's bare `C`) and leaves
+`F` to the farad. The unit selector lists the variable's base unit followed
+by every unit of the same kind, or by `unitOptions` when it is provided.
+Typed values are converted from the selected display unit into the base unit,
+and displayed values are converted back out.
+
+### Component models
+
+`src/models` holds the shared, data-driven models for real parts. Each file
+pairs an approximate reference table with the maths that turns a rating into
+a curve, so the same numbers feed the calculators, the tables dialog, and the
+SPICE netlist.
+
+- `inductor-types.ts` lists magnetic materials and constructions (air,
+  ferrite, powdered iron, Sendust, MPP, high flux, nanocrystalline). The
+  saturation law is the behavioural rational form
+  `L(i) = L∞ + (L0 − L∞) / (1 + (|i| / I_k)^p)`: `L0` is the rated
+  inductance, `L∞` the residual inductance left at very high current, `I_k`
+  the knee current at which the drop is halfway, and `p` the knee sharpness.
+  Air core never saturates, so its model stays linear.
+- `capacitor-types.ts` lists dielectric and package classes (C0G/NP0, X5R,
+  X7R, X8R, X7T, aluminium, tantalum). The DC-bias law is the matching form
+  `C(V) = Csat + (C0 − Csat) / (1 + (|V| / V0)^n)`. Class-2 ceramics lose
+  capacitance as they are biased; the knee voltage `V0` is derived from the
+  part's active volume, dielectric constant k, and a form modifier, then
+  capped at 1.5× the voltage rating. C0G and the electrolytics are linear.
+
+The inductor tables quote the rated saturation current at 25 °C and a
+derating figure at 100 °C; the temperature inputs interpolate linearly
+between the two, which the field descriptions note. Because the laws appear
+twice — once in TypeScript for the calculator outputs and once as ngspice
+behavioural sources (`BL … ddt(i)` and `Bcap … ddt(v)`) in the netlist — the
+closed-form and simulated curves agree; keep the two in step.
+
+The Basic category uses the models directly in two calculators, **Inductance
+at a current bias** and **Capacitance at a DC bias**, which the SPICE inrush
+transient then builds on.
 
 ### Adding a category
 
-1. Create `src/categories/<id>/index.ts` exporting `{ calculators }`.
+1. Create `src/categories/<id>/index.ts` exporting `{ calculators }` (and,
+   optionally, `tables`).
 2. Add the definition(s) to that array.
 3. Register the lazy import in `src/app.ts`:
 
@@ -193,6 +234,12 @@ export const CATEGORY_MANIFEST = {
 
 You can also register a calculator directly at runtime with
 `app.categories.basic.add(definition)`.
+
+Tables a category exports are registered with it under their `id` and become
+reference data for its calculators: a variable with a `table` field becomes a
+dropdown over that table's rows. Categories that need the same data export
+the same table (the Basic and SPICE categories both ship the inductor and
+capacitor model tables), so a shared model only needs defining once.
 
 ### Testing calculator definitions
 
@@ -246,25 +293,29 @@ server.
 
 The first calculator, **Inrush Transient**, switches a supply voltage through
 a series inductance and resistance onto a capacitor, with a second capacitor
-behind its own resistance in parallel. It reports the peak load-capacitor
-voltage, the peak series current, and the energy dissipated in each
-resistance, and graphs the series current and capacitor voltage over the run.
-The time step (default 100 ns) and simulation length (default 100 ms) are
-adjustable.
+behind its own resistance in parallel. Pick the inductor material and each
+capacitor's dielectric to bring in the saturation and DC-bias models, enter
+the parts' rated values and voltage ratings, and set the operating
+temperature. It reports the peak load-capacitor voltage, the peak series
+current, and the energy dissipated in each resistance, and graphs the series
+current and capacitor voltage over the run. The time step (default 100 ns)
+and simulation length (default 100 ms) are adjustable.
 
 The pipeline is deliberately split so most of it is testable without the
 simulator:
 
-- `circuit.ts` builds the netlist as plain text.
+- `circuit.ts` builds the netlist as plain text: linear parts emit native
+  `L`/`C` elements, while saturating inductors and DC-bias capacitors emit
+  behavioural sources carrying the `src/models` laws.
 - `run.ts` runs ngspice in the current context (Node or a worker).
 - `rawfile.ts` parses the binary rawfile into named vectors.
 - `metrics.ts` integrates those vectors into the reported numbers.
 - `simulate.ts` is the worker client, cancelled through an `AbortSignal`.
 
-`run.test.ts` exercises the real ngspice build end-to-end under Node and
-checks the physics (both capacitors settle to the supply, the load capacitor
-overshoots, and the resistors dissipate about the same energy the capacitors
-store).
+`run.test.ts` exercises the real ngspice build end-to-end under Node, once
+for a linear circuit and once for one with a saturating inductor and DC-bias
+capacitors, and checks the physics (both capacitors settle to the supply, the
+load capacitor overshoots, and every sample stays finite).
 
 ## Deploying to GitHub Pages
 

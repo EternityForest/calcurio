@@ -19,21 +19,25 @@ export type InductanceUnit = 'H' | 'mH' | 'µH' | 'nH';
 /** Units added by Calcurio because the library has no capacitance measure. */
 export type CapacitanceUnit = 'F' | 'mF' | 'µF' | 'nF' | 'pF';
 
+/**
+ * Units added by Calcurio because the library writes Celsius and Fahrenheit
+ * as a bare "C" and "F". The degree-signed symbols read better, and the bare
+ * "F" is already taken by the farad.
+ */
+export type TemperatureUnit = '°C' | 'K' | '°F' | '°R';
+
 /** Every unit a calculator variable may use. */
 export type UnitSymbol =
   | AllMeasuresUnits
   | ResistanceUnit
   | ResistivityUnit
   | InductanceUnit
-  | CapacitanceUnit;
+  | CapacitanceUnit
+  | TemperatureUnit;
 
 /** Every measurement kind the unit registry understands. */
 export type MeasureName =
-  | AllMeasures
-  | 'resistance'
-  | 'resistivity'
-  | 'inductance'
-  | 'capacitance';
+  AllMeasures | 'resistance' | 'resistivity' | 'inductance' | 'capacitance';
 
 type SystemName = AllMeasuresSystems;
 
@@ -103,7 +107,7 @@ const inductance: Measure<SystemName, InductanceUnit> = {
         name: { singular: 'Nanohenry', plural: 'Nanohenries' },
         to_anchor: 1e-9,
       },
-      'µH': {
+      µH: {
         name: { singular: 'Microhenry', plural: 'Microhenries' },
         to_anchor: 1e-6,
       },
@@ -130,7 +134,7 @@ const capacitance: Measure<SystemName, CapacitanceUnit> = {
         name: { singular: 'Nanofarad', plural: 'Nanofarads' },
         to_anchor: 1e-9,
       },
-      'µF': {
+      µF: {
         name: { singular: 'Microfarad', plural: 'Microfarads' },
         to_anchor: 1e-6,
       },
@@ -138,10 +142,56 @@ const capacitance: Measure<SystemName, CapacitanceUnit> = {
         name: { singular: 'Millifarad', plural: 'Millifarads' },
         to_anchor: 1e-3,
       },
-      // Farad is added after `temperature` so that it wins the "F" symbol.
       F: {
         name: { singular: 'Farad', plural: 'Farads' },
         to_anchor: 1,
+      },
+    },
+  },
+};
+
+/**
+ * Temperature with degree-signed symbols. This replaces the library's own
+ * temperature measure so that Celsius reads as "°C"; the farad keeps the bare
+ * "F" symbol because this measure does not define one.
+ */
+const temperature: Measure<SystemName, TemperatureUnit> = {
+  systems: {
+    metric: {
+      '°C': {
+        name: { singular: 'Degree Celsius', plural: 'Degrees Celsius' },
+        to_anchor: 1,
+        anchor_shift: 0,
+      },
+      K: {
+        name: { singular: 'Kelvin', plural: 'Kelvins' },
+        to_anchor: 1,
+        anchor_shift: 273.15,
+      },
+    },
+    imperial: {
+      '°F': {
+        name: { singular: 'Degree Fahrenheit', plural: 'Degrees Fahrenheit' },
+        to_anchor: 1,
+      },
+      '°R': {
+        name: { singular: 'Degree Rankine', plural: 'Degrees Rankine' },
+        to_anchor: 1,
+        anchor_shift: 459.67,
+      },
+    },
+  },
+  anchors: {
+    metric: {
+      imperial: {
+        transform: (celsius, cls) =>
+          cls.add(cls.div(celsius, cls.div(5, 9)), 32),
+      },
+    },
+    imperial: {
+      metric: {
+        transform: (fahrenheit, cls) =>
+          cls.mul(cls.sub(fahrenheit, 32), cls.div(5, 9)),
       },
     },
   },
@@ -153,6 +203,7 @@ const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   resistivity,
   inductance,
   capacitance,
+  temperature,
 };
 
 const convert = configureMeasurements(measures);

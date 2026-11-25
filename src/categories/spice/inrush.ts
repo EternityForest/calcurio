@@ -2,7 +2,9 @@
  * Capacitor inrush transient calculator. The circuit and timing are handed to
  * ngspice, which returns the waveforms; the calculator reports peak voltage,
  * peak current, and the energy burned in each series resistance, and shows the
- * current and voltage traces.
+ * current and voltage traces. The inductor and both capacitors may be
+ * nonlinear: their types are looked up in the model tables and resolved into
+ * the laws `src/models` describes.
  */
 
 import { errorMessage } from '../../framework/errors.js';
@@ -10,6 +12,16 @@ import type { ComputeStateContext } from '../../framework/output.js';
 import type { CalcState, CalculatorDefinition } from '../../framework/types.js';
 import { unchanged } from '../../framework/unchanged.js';
 import { convertUnit } from '../../framework/units.js';
+import {
+  findCapacitorType,
+  resolveCapacitor,
+} from '../../models/capacitor-types.js';
+import type { CapacitorModel } from '../../models/capacitor-types.js';
+import {
+  findInductorType,
+  resolveInductor,
+} from '../../models/inductor-types.js';
+import type { InductorModel } from '../../models/inductor-types.js';
 import { createInrushChart } from './chart.js';
 import {
   VECTOR_CAPACITOR1_VOLTAGE,
@@ -17,6 +29,7 @@ import {
   VECTOR_TIME,
   buildNetlist,
 } from './circuit.js';
+import type { InrushCircuit } from './circuit.js';
 import { computeMetrics } from './metrics.js';
 import { findVector } from './rawfile.js';
 import type { RawFile } from './rawfile.js';
@@ -53,6 +66,67 @@ function positive(
     throw new Error(`${label} must be greater than zero.`);
   }
   return value;
+}
+
+/** Reads a finite input that may be zero or negative, such as a temperature. */
+function finite(
+  state: Readonly<CalcState>,
+  name: string,
+  label: string,
+): number {
+  const value = state[name];
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a number.`);
+  }
+  return value;
+}
+
+/** Reads a chosen table row, failing with a message fit for the UI. */
+function selection(
+  state: Readonly<CalcState>,
+  name: string,
+  label: string,
+): string {
+  const value = state[name];
+  if (typeof value !== 'string' || value === '') {
+    throw new Error(`Choose ${label}.`);
+  }
+  return value;
+}
+
+/** Resolves the series inductor from the chosen type and rated values. */
+function resolveInductorFrom(state: Readonly<CalcState>): InductorModel {
+  const id = selection(state, 'inductorType', 'an inductor type');
+  const type = findInductorType(id);
+  if (type === null) {
+    throw new Error('Choose a known inductor type.');
+  }
+  return resolveInductor(
+    type,
+    positive(state, 'seriesInductance', 'The series inductance'),
+    positive(state, 'saturationCurrent', 'The saturation current'),
+    finite(state, 'temperature', 'The temperature'),
+  );
+}
+
+/** Resolves one capacitor from the chosen type and its rated values. */
+function resolveCapacitorFrom(
+  state: Readonly<CalcState>,
+  typeName: string,
+  capacitanceName: string,
+  ratingName: string,
+  label: string,
+): CapacitorModel {
+  const id = selection(state, typeName, `a type for ${label}`);
+  const type = findCapacitorType(id);
+  if (type === null) {
+    throw new Error('Choose a known capacitor type.');
+  }
+  return resolveCapacitor(
+    type,
+    positive(state, capacitanceName, `${label} capacitance`),
+    positive(state, ratingName, `${label} voltage rating`),
+  );
 }
 
 /** Cross-checks the step against the length once both have values. */
@@ -110,9 +184,10 @@ export const inrushTransient: CalculatorDefinition = {
   title: 'Inrush Transient',
   description:
     'Simulates switching a supply through an inductance and resistance onto ' +
-    'two capacitors, the second behind its own resistance. Fill in the ' +
-    'circuit, then press Run simulation to get the peaks, the energy ' +
-    'dissipated in the resistors, and a graph of the waveforms.',
+    'two capacitors, the second behind its own resistance. Pick the inductor ' +
+    'and capacitor types to include their saturation and DC-bias behaviour, ' +
+    'then press Run simulation to get the peaks, the energy dissipated in the ' +
+    'resistors, and a graph of the waveforms.',
   variables: [
     {
       name: 'sourceVoltage',
@@ -125,10 +200,30 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'seriesInductance',
       label: 'Series inductance',
       unit: 'H',
-      description: 'Inductance between the supply and the capacitors.',
+      description:
+        'Inductance between the supply and the capacitors, at zero current.',
       validate: aboveZero(
         'seriesInductance',
         'The inductance must be greater than zero.',
+      ),
+    },
+    {
+      name: 'inductorType',
+      label: 'Inductor type',
+      table: 'inductor-types',
+      description:
+        'Material and construction class, which sets the saturation shape.',
+    },
+    {
+      name: 'saturationCurrent',
+      label: 'Rated saturation current',
+      unit: 'A',
+      description:
+        'Current at which the inductor reaches its saturation drop, quoted ' +
+        'at 25 °C. Ignored by materials that do not saturate.',
+      validate: aboveZero(
+        'saturationCurrent',
+        'The saturation current must be greater than zero.',
       ),
     },
     {
@@ -145,10 +240,28 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitance1',
       label: 'Capacitance 1',
       unit: 'F',
-      description: 'Capacitor directly across the load.',
+      description: 'Capacitor directly across the load, at zero bias.',
       validate: aboveZero(
         'capacitance1',
         'Capacitance 1 must be greater than zero.',
+      ),
+    },
+    {
+      name: 'capacitor1Type',
+      label: 'Capacitor 1 type',
+      table: 'capacitor-types',
+      description: 'Dielectric and package of the load capacitor.',
+    },
+    {
+      name: 'capacitor1VoltageRating',
+      label: 'Capacitor 1 voltage rating',
+      unit: 'V',
+      description:
+        'Working voltage of the load capacitor. Caps the knee voltage of ' +
+        'the DC-bias model; not used by linear types.',
+      validate: aboveZero(
+        'capacitor1VoltageRating',
+        'The voltage rating must be greater than zero.',
       ),
     },
     {
@@ -165,11 +278,37 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitance2',
       label: 'Capacitance 2',
       unit: 'F',
-      description: 'Capacitor behind the damping resistance.',
+      description: 'Capacitor behind the damping resistance, at zero bias.',
       validate: aboveZero(
         'capacitance2',
         'Capacitance 2 must be greater than zero.',
       ),
+    },
+    {
+      name: 'capacitor2Type',
+      label: 'Capacitor 2 type',
+      table: 'capacitor-types',
+      description: 'Dielectric and package of the second capacitor.',
+    },
+    {
+      name: 'capacitor2VoltageRating',
+      label: 'Capacitor 2 voltage rating',
+      unit: 'V',
+      description:
+        'Working voltage of the second capacitor. Ignored by linear types.',
+      validate: aboveZero(
+        'capacitor2VoltageRating',
+        'The voltage rating must be greater than zero.',
+      ),
+    },
+    {
+      name: 'temperature',
+      label: 'Temperature',
+      unit: '°C',
+      default: 25,
+      description:
+        'Operating temperature. The saturation current is derated linearly ' +
+        'from the 25 °C rating to the 100 °C figure in the table.',
     },
     {
       name: 'step',
@@ -222,25 +361,39 @@ export const inrushTransient: CalculatorDefinition = {
     },
   ],
   async computeState(state, context) {
-    const circuit = {
-      sourceVoltage: positive(state, 'sourceVoltage', 'The source voltage'),
-      seriesInductance: positive(
-        state,
-        'seriesInductance',
-        'The series inductance',
-      ),
+    // Read the source voltage first so an empty circuit names it in the error.
+    const sourceVoltage = positive(
+      state,
+      'sourceVoltage',
+      'The source voltage',
+    );
+    const circuit: InrushCircuit = {
+      sourceVoltage,
       seriesResistance: positive(
         state,
         'seriesResistance',
         'The series resistance',
       ),
-      capacitance1: positive(state, 'capacitance1', 'Capacitance 1'),
       dampingResistance: positive(
         state,
         'dampingResistance',
         'The damping resistance',
       ),
-      capacitance2: positive(state, 'capacitance2', 'Capacitance 2'),
+      inductor: resolveInductorFrom(state),
+      capacitor1: resolveCapacitorFrom(
+        state,
+        'capacitor1Type',
+        'capacitance1',
+        'capacitor1VoltageRating',
+        'capacitance 1',
+      ),
+      capacitor2: resolveCapacitorFrom(
+        state,
+        'capacitor2Type',
+        'capacitance2',
+        'capacitor2VoltageRating',
+        'capacitance 2',
+      ),
     };
     const analysis = {
       step: convertUnit(positive(state, 'step', 'The time step'), 'ns', 's'),

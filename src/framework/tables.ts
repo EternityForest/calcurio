@@ -96,8 +96,23 @@ export function validateTableDefinition(table: TableDefinition): void {
     if (column.label.trim() === '') {
       problems.push(`${where}: label must not be empty.`);
     }
+    if (
+      column.kind !== undefined &&
+      column.kind !== 'text' &&
+      column.kind !== 'number' &&
+      column.kind !== 'boolean'
+    ) {
+      problems.push(`${where}: unknown kind "${column.kind}".`);
+    }
     if (column.unit !== undefined && tryDescribeUnit(column.unit) === null) {
       problems.push(`${where}: unknown unit "${column.unit}".`);
+    }
+    if (column.unit !== undefined && column.kind !== undefined) {
+      if (column.kind !== 'number') {
+        problems.push(
+          `${where}: a ${column.kind} column must not have a unit.`,
+        );
+      }
     }
   }
 
@@ -147,7 +162,13 @@ export function validateTableDefinition(table: TableDefinition): void {
       if (value === null || value === undefined) {
         continue;
       }
-      if (isTextColumn(column)) {
+      if (isBooleanColumn(column)) {
+        if (typeof value !== 'boolean') {
+          problems.push(
+            `${where}: boolean column "${column.key}" must be true or false.`,
+          );
+        }
+      } else if (isTextColumn(column)) {
         if (typeof value !== 'string') {
           problems.push(`${where}: text column "${column.key}" must be text.`);
         }
@@ -166,14 +187,25 @@ export function validateTableDefinition(table: TableDefinition): void {
   }
 }
 
-/** True for columns without a unit, which store text. */
+/** True for columns that store text. */
 export function isTextColumn(column: TableColumn): boolean {
+  if (column.kind !== undefined) {
+    return column.kind === 'text';
+  }
   return column.unit === undefined;
 }
 
-/** True for columns with a unit, which store numbers. */
+/** True for columns that store numbers, with or without a unit. */
 export function isNumericColumn(column: TableColumn): boolean {
+  if (column.kind !== undefined) {
+    return column.kind === 'number';
+  }
   return column.unit !== undefined;
+}
+
+/** True for columns that store boolean yes/no flags. */
+export function isBooleanColumn(column: TableColumn): boolean {
+  return column.kind === 'boolean';
 }
 
 /** Finds a column by key, or returns undefined. */
@@ -210,4 +242,23 @@ export function findRow(
 /** Narrows an unknown table cell to a finite number. */
 export function numericCell(value: TableCell | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Narrows an unknown table cell to a boolean flag. */
+export function booleanCell(value: TableCell | undefined): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+/** Narrows an unknown table cell to a string. */
+export function textCell(value: TableCell | undefined): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+/** Reads a numeric column, rejecting rows whose value is missing or null. */
+export function requireNumber(row: TableRow, key: string): number {
+  const value = numericCell(row[key]);
+  if (value === null) {
+    throw new Error(`Table row is missing numeric column "${key}".`);
+  }
+  return value;
 }

@@ -1,35 +1,81 @@
 import createNgspiceModule from '@o.z/ngspice-wasm';
 import { describe, expect, it } from 'vitest';
 import {
+  findCapacitorType,
+  resolveCapacitor,
+} from '../../models/capacitor-types.js';
+import {
+  findInductorType,
+  resolveInductor,
+} from '../../models/inductor-types.js';
+import {
   VECTOR_CAPACITOR1_VOLTAGE,
   VECTOR_CAPACITOR2_VOLTAGE,
   VECTOR_SERIES_CURRENT,
   VECTOR_TIME,
   buildNetlist,
 } from './circuit.js';
+import type { InrushCircuit } from './circuit.js';
 import { computeMetrics } from './metrics.js';
 import { findVector, parseRawFile } from './rawfile.js';
 import { runNgspice } from './run.js';
 
-const CIRCUIT = {
-  sourceVoltage: 400,
-  seriesInductance: 100e-6,
-  seriesResistance: 0.5,
-  capacitance1: 470e-6,
-  dampingResistance: 1,
-  capacitance2: 100e-6,
-};
+/** A linear circuit: an air-core inductor and C0G capacitors. */
+function linearCircuit(): InrushCircuit {
+  const inductor = resolveInductor(findInductorType('air')!, 100e-6, 10, 25);
+  const capacitor1 = resolveCapacitor(
+    findCapacitorType('c0g-0603')!,
+    470e-6,
+    50,
+  );
+  const capacitor2 = resolveCapacitor(
+    findCapacitorType('c0g-0603')!,
+    100e-6,
+    50,
+  );
+  return {
+    sourceVoltage: 400,
+    seriesResistance: 0.5,
+    dampingResistance: 1,
+    inductor,
+    capacitor1,
+    capacitor2,
+  };
+}
 
-const ANALYSIS = { step: 10e-6, stop: 10e-3 };
+/** A saturating inductor and DC-biased ceramic capacitors. */
+function nonlinearCircuit(): InrushCircuit {
+  const inductor = resolveInductor(
+    findInductorType('ferrite-drum')!,
+    100e-6,
+    8,
+    25,
+  );
+  const capacitor1 = resolveCapacitor(
+    findCapacitorType('x7r-0805')!,
+    10e-6,
+    16,
+  );
+  const capacitor2 = resolveCapacitor(findCapacitorType('x7r-0603')!, 1e-6, 16);
+  return {
+    sourceVoltage: 12,
+    seriesResistance: 0.2,
+    dampingResistance: 0.5,
+    inductor,
+    capacitor1,
+    capacitor2,
+  };
+}
 
 /**
  * End-to-end check against the real ngspice build. It is intentionally slow
  * because it instantiates the WebAssembly module and runs a full transient.
  */
 describe('runNgspice', () => {
-  it('simulates the inrush circuit into a physically sensible result', async () => {
+  it('simulates the linear inrush circuit into a physically sensible result', async () => {
+    const analysis = { step: 10e-6, stop: 10e-3 };
     const bytes = await runNgspice(
-      buildNetlist(CIRCUIT, ANALYSIS),
+      buildNetlist(linearCircuit(), analysis),
       createNgspiceModule,
     );
     const data = parseRawFile(bytes);
@@ -53,8 +99,8 @@ describe('runNgspice', () => {
     expect(Math.abs(capacitor2.at(-1)! - 400)).toBeLessThan(4);
 
     const metrics = computeMetrics(data, {
-      seriesResistance: CIRCUIT.seriesResistance,
-      dampingResistance: CIRCUIT.dampingResistance,
+      seriesResistance: 0.5,
+      dampingResistance: 1,
     });
 
     // The lightly damped load capacitor overshoots its final value.
@@ -64,11 +110,32 @@ describe('runNgspice', () => {
     // A constant supply delivers (C1 + C2) * V of charge, so it supplies
     // twice the energy stored at the end; the other half is burnt in the
     // resistors regardless of their values.
-    const stored =
-      0.5 * (CIRCUIT.capacitance1 + CIRCUIT.capacitance2) * 400 ** 2;
+    const stored = 0.5 * (470e-6 + 100e-6) * 400 ** 2;
     const dissipated =
       metrics.energySeriesResistance + metrics.energyDampingResistance;
     expect(dissipated).toBeGreaterThan(stored * 0.95);
     expect(dissipated).toBeLessThan(stored * 1.05);
+  }, 120_000);
+
+  it('simulates a nonlinear circuit with a saturating inductor and biased capacitors', async () => {
+    const circuit = nonlinearCircuit();
+    expect(circuit.inductor.linear).toBe(false);
+    expect(circuit.capacitor1.nonlinear).toBe(true);
+
+    const bytes = await runNgspice(
+      buildNetlist(circuit, { step: 10e-6, stop: 2e-3 }),
+      createNgspiceModule,
+    );
+    const data = parseRawFile(bytes);
+    const capacitor1 = findVector(data, VECTOR_CAPACITOR1_VOLTAGE)!;
+    const current = findVector(data, VECTOR_SERIES_CURRENT)!;
+
+    // The transient still settles on the supply voltage and every sample is
+    // finite, which is all this smoke test needs from the behavioural laws.
+    expect(capacitor1.at(-1)!).toBeCloseTo(12, 0);
+    for (let index = 0; index < current.length; index += 1) {
+      expect(Number.isFinite(capacitor1[index]!)).toBe(true);
+      expect(Number.isFinite(current[index]!)).toBe(true);
+    }
   }, 120_000);
 });

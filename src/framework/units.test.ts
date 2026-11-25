@@ -19,6 +19,12 @@ describe('convertUnit', () => {
     expect(convertUnit(1, 'MΩ', 'kΩ')).toBeCloseTo(1000, 12);
     expect(convertUnit(1, 'mΩ', 'Ω')).toBeCloseTo(0.001, 12);
   });
+
+  it('converts between temperature units', () => {
+    expect(convertUnit(25, '°C', 'K')).toBeCloseTo(298.15, 12);
+    expect(convertUnit(100, '°C', '°F')).toBeCloseTo(212, 12);
+    expect(convertUnit(-40, '°C', '°F')).toBeCloseTo(-40, 12);
+  });
 });
 
 describe('unitsOfKind', () => {

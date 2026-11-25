@@ -185,6 +185,7 @@ export class CalculatorRuntime {
     }
 
     this.bindTables(tables);
+    this.applyTableDefaults();
 
     this.derivedNames = definition.variables
       .filter((variable) => this.isDerived(variable))
@@ -591,6 +592,7 @@ export class CalculatorRuntime {
       }
     }
     this.pinnedNames = new Set();
+    this.applyTableDefaults();
     this.order = [...this.derivedNames];
     this.lastTouchedName = null;
     this.recompute();
@@ -778,6 +780,34 @@ export class CalculatorRuntime {
     }
   }
 
+  /**
+   * Applies the declared default of every standalone table select. A select
+   * that is driven by referencing table fields derives its own row, so only a
+   * select without fields honours a default. The chosen row is pinned, because
+   * the recompute pass has nothing to derive it from and would otherwise clear
+   * it. A default that names no row is ignored.
+   */
+  private applyTableDefaults(): void {
+    for (const variable of this.definition.variables) {
+      if (!isTableSelectVariable(variable)) {
+        continue;
+      }
+      const key = variable.default;
+      if (key === undefined) {
+        continue;
+      }
+      if ((this.tableFieldsBySelect.get(variable.name) ?? []).length > 0) {
+        continue;
+      }
+      const binding = this.tableSelects.get(variable.name);
+      if (binding === undefined || findRow(binding.table, key) === undefined) {
+        continue;
+      }
+      this.values[variable.name] = key;
+      this.pinnedNames.add(variable.name);
+    }
+  }
+
   private resolveTable(
     variable: TableSelectVariableDefinition,
     tables: TableResolver | undefined,
@@ -805,8 +835,9 @@ export class CalculatorRuntime {
   }
 
   /**
-   * Starting value for a variable. Only plain numeric variables can declare a
-   * default; derived and table-backed variables always start empty.
+   * Starting value for a variable. Plain numeric variables use their default
+   * here; table selects and other derived variables start empty, and
+   * `applyTableDefaults` later layers a standalone select's default on top.
    */
   private initialValue(variable: VariableDefinition): CalcValue {
     if (isTableSelectVariable(variable)) {

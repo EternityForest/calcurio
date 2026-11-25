@@ -191,6 +191,12 @@ function validateTableSelect(
   if (!isValidIdentifier(variable.table ?? '')) {
     problems.push(`${where}: table must be a lowercase, hyphenated table id.`);
   }
+  if (
+    variable.default !== undefined &&
+    (typeof variable.default !== 'string' || variable.default.trim() === '')
+  ) {
+    problems.push(`${where}: default must be a non-empty row key.`);
+  }
   if ('unit' in variable) {
     problems.push(`${where}: a table-select variable must not have a unit.`);
   }

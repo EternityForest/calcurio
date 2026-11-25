@@ -7,9 +7,11 @@ import {
   MAX_REFINEMENT_ROUNDS,
   nearlyEqual,
 } from './runtime.js';
+import { TableRegistry } from './tables.js';
 import type {
   CalcState,
   CalculatorDefinition,
+  TableDefinition,
   VariableDefinition,
 } from './types.js';
 import { unchanged } from './unchanged.js';
@@ -794,4 +796,94 @@ describe('defaults', () => {
     expect(runtime.state['length']).toBe(0.1);
     expect(runtime.state['double']).toBe(200);
   });
+
+  it('starts a standalone table select at its default and restores it on reset', () => {
+    const registry = new TableRegistry([materialsTable]);
+    const runtime = new CalculatorRuntime(selectDefinition('copper'), registry);
+
+    expect(runtime.state['material']).toBe('copper');
+    expect(runtime.isPinned('material')).toBe(true);
+
+    runtime.setSelection('material', 'silver');
+    expect(runtime.state['material']).toBe('silver');
+
+    runtime.reset();
+    expect(runtime.state['material']).toBe('copper');
+  });
+
+  it('ignores a table-select default that names no row', () => {
+    const registry = new TableRegistry([materialsTable]);
+    const runtime = new CalculatorRuntime(
+      selectDefinition('unobtainium'),
+      registry,
+    );
+
+    expect(runtime.state['material']).toBeNull();
+  });
+
+  it('lets a table-driven select derive its row instead of a default', () => {
+    const registry = new TableRegistry([materialsTable]);
+    const runtime = new CalculatorRuntime(fieldSelectDefinition(), registry);
+
+    expect(runtime.state['material']).toBeNull();
+
+    runtime.setDisplayText('resistivity', '2');
+    expect(runtime.state['material']).toBe('silver');
+  });
 });
+
+/** A small table with one numeric column for the default tests. */
+const materialsTable: TableDefinition = {
+  id: 'materials',
+  title: 'Materials',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    { key: 'resistivity', label: 'Resistivity', unit: 'Ω' },
+  ],
+  rows: [
+    { id: 'copper', label: 'Copper', resistivity: 1 },
+    { id: 'silver', label: 'Silver', resistivity: 2 },
+  ],
+};
+
+/** A definition with one standalone table select and an optional default. */
+function selectDefinition(defaultKey?: string): CalculatorDefinition {
+  return {
+    id: 'select-default',
+    title: 'Select default',
+    variables: [
+      {
+        name: 'material',
+        label: 'Material',
+        table: 'materials',
+        ...(defaultKey === undefined ? {} : { default: defaultKey }),
+      },
+    ],
+  };
+}
+
+/** A definition whose select is driven by a referencing table field. */
+function fieldSelectDefinition(): CalculatorDefinition {
+  return {
+    id: 'field-select',
+    title: 'Field select',
+    variables: [
+      {
+        name: 'material',
+        label: 'Material',
+        table: 'materials',
+        default: 'copper',
+      },
+      {
+        name: 'resistivity',
+        label: 'Resistivity',
+        unit: 'Ω',
+        tableSelect: 'material',
+        tableField: 'resistivity',
+      },
+    ],
+  };
+}

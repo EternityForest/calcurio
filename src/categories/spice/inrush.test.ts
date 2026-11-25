@@ -23,11 +23,14 @@ describe('inrush transient calculator', () => {
     expect(inrushTransient.computeState).toBeTypeOf('function');
   });
 
-  it('defaults the timing and temperature fields', () => {
+  it('defaults the timing, temperature, and part types', () => {
     const runtime = new CalculatorRuntime(inrushTransient, tables);
     expect(runtime.state['step']).toBe(100);
     expect(runtime.state['length']).toBe(100);
     expect(runtime.state['temperature']).toBe(25);
+    expect(runtime.state['inductorType']).toBe('air');
+    expect(runtime.state['capacitor1Type']).toBe('x5r-0402');
+    expect(runtime.state['capacitor2Type']).toBe('x5r-0402');
   });
 
   it('offers an inductor type and a capacitor type per capacitor', () => {

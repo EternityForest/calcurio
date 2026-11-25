@@ -122,16 +122,18 @@ describe('runNgspice', () => {
     expect(circuit.inductor.linear).toBe(false);
     expect(circuit.capacitor1.nonlinear).toBe(true);
 
+    // The lightly damped LC circuit rings for several milliseconds, so the
+    // window has to outlast the settling or the final sample is mid-oscillation.
     const bytes = await runNgspice(
-      buildNetlist(circuit, { step: 10e-6, stop: 2e-3 }),
+      buildNetlist(circuit, { step: 10e-6, stop: 10e-3 }),
       createNgspiceModule,
     );
     const data = parseRawFile(bytes);
     const capacitor1 = findVector(data, VECTOR_CAPACITOR1_VOLTAGE)!;
     const current = findVector(data, VECTOR_SERIES_CURRENT)!;
 
-    // The transient still settles on the supply voltage and every sample is
-    // finite, which is all this smoke test needs from the behavioural laws.
+    // The transient settles on the supply voltage and every sample is finite,
+    // which is all this smoke test needs from the saturation and bias laws.
     expect(capacitor1.at(-1)!).toBeCloseTo(12, 0);
     for (let index = 0; index < current.length; index += 1) {
       expect(Number.isFinite(capacitor1[index]!)).toBe(true);

@@ -63,7 +63,7 @@ describe('buildNetlist', () => {
     );
   });
 
-  it('emits a behavioural inductor whose law mirrors the saturation model', () => {
+  it('emits a native saturating inductor whose law mirrors the model', () => {
     const netlist = buildNetlist(
       {
         ...circuit,
@@ -81,12 +81,14 @@ describe('buildNetlist', () => {
     );
 
     expect(netlist).toContain(
-      'BL 2 3 V = (0.5 + (2 - 0.5) / (1 + (abs(i(VsenseL)) / 3) ** 2)) * ' +
-        'ddt(i(VsenseL))',
+      'L1 2 3 L = (0.5 + (2 - 0.5) / (1 + (abs(i(VsenseL)) / 3) ** 2))',
+    );
+    expect(netlist).toContain(
+      '.options reltol=0.01 abstol=1e-6 vntol=1e-4 itl4=200',
     );
   });
 
-  it('emits a behavioural capacitor whose law mirrors the DC-bias model', () => {
+  it('emits a native DC-bias capacitor with a closed-form charge', () => {
     const netlist = buildNetlist(
       {
         ...circuit,
@@ -102,10 +104,12 @@ describe('buildNetlist', () => {
     );
 
     expect(netlist).toContain(
-      'Bcap1 4 0 I = (1 + (3 - 1) / (1 + (abs(v(4)) / 10) ** 2)) * ' +
-        'ddt(v(4))',
+      'C1 4 0 Q = (1 * v(4) + (3 - 1) * 10 * atan(v(4) / 10))',
     );
     expect(netlist).toContain('C2 5 0 5');
+    expect(netlist).toContain(
+      '.options reltol=0.01 abstol=1e-6 vntol=1e-4 itl4=200',
+    );
   });
 
   it('uses the vector names the parser and metrics expect', () => {

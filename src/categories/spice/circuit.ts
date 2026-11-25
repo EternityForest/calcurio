@@ -37,8 +37,15 @@ const NODE_LOAD = 4;
 /** Node carrying the second capacitor voltage. */
 const NODE_DAMPING = 5;
 
-/** Senses the series current so the behavioural inductor can read it. */
+/** Senses the series current so the inductor law can read it. */
 const SERIES_SENSE = 'VsenseL';
+
+/**
+ * Loosened solver tolerances. A saturating part only converges at a usable step
+ * with these; a fully linear circuit keeps ngspice's defaults for accuracy.
+ */
+const LOOSE_OPTIONS =
+  '.options reltol=0.01 abstol=1e-6 vntol=1e-4 itl4=200';
 
 /** Rawfile vector names, lowercased to match ngspice output. */
 export const VECTOR_TIME = 'time';
@@ -50,8 +57,8 @@ export const VECTOR_CAPACITOR2_VOLTAGE = `v(${NODE_DAMPING})`;
  * Builds a batch-mode netlist for the inrush circuit. The supply feeds the
  * series inductor and resistance; `C1` sits across the load, and `R2` with
  * `C2` forms a second branch in parallel with it. The inductor is sensed by a
- * zero-volt source and driven by a behavioural voltage source, so a saturating
- * core behaves exactly as the model says.
+ * zero-volt source so the series current is available under a stable vector
+ * name.
  */
 export function buildNetlist(
   circuit: InrushCircuit,
@@ -73,35 +80,51 @@ export function buildNetlist(
     // so the result is a genuine inrush. Repeating the step as `tmax` forces
     // ngspice to emit evenly spaced samples.
     `.tran ${step} ${spiceNumber(analysis.stop)} 0 ${step} uic`,
+    ...(needsLooseTolerances(circuit) ? [LOOSE_OPTIONS] : []),
     '.end',
     '',
   ].join('\n');
 }
 
 /**
+ * True when any part is nonlinear. Such circuits only converge with loosened
+ * tolerances (see `LOOSE_OPTIONS`).
+ */
+function needsLooseTolerances(circuit: InrushCircuit): boolean {
+  return (
+    !circuit.inductor.linear ||
+    circuit.capacitor1.nonlinear ||
+    circuit.capacitor2.nonlinear
+  );
+}
+
+/**
  * The series inductor line. A fixed part is a plain `L`, which integrates
- * exactly; a saturating part is a behavioural voltage source driven by the
- * sensed current, whose law mirrors `inductanceAtCurrent` in
- * `src/models/inductor-types.ts`. The zero-volt `VsenseL` source in front of
- * either form senses the series current under a stable vector name.
+ * exactly; a saturating part is a native `L` whose `L = <expr>` value mirrors
+ * `inductanceAtCurrent` in `src/models/inductor-types.ts`. The zero-volt
+ * `VsenseL` source in front of either form senses the series current under a
+ * stable vector name.
  */
 function inductorElement(model: InductorModel): string {
   if (model.linear) {
     return `L1 2 3 ${spiceNumber(model.inductance)}`;
   }
+  // A current-dependent inductance is a native `L` carrying an `L = <expr>`
+  // value: ngspice reads the law and integrates it, which converges where a
+  // behavioural `V = L(i) * ddt(i)` source does not.
   const current = `i(${SERIES_SENSE})`;
   return (
-    `BL 2 3 V = ` +
-    `(${spiceNumber(model.infinity)} + ` +
+    `L1 2 3 L = (` +
+    `${spiceNumber(model.infinity)} + ` +
     `(${spiceNumber(model.inductance)} - ${spiceNumber(model.infinity)}) / ` +
     `(1 + (abs(${current}) / ${spiceNumber(model.kneeCurrent)}) ** ` +
-    `${spiceNumber(model.knee)})) * ddt(${current})`
+    `${spiceNumber(model.knee)}))`
   );
 }
 
 /**
- * The capacitor element lines. A fixed part is a plain capacitor; a biased
- * part is a behavioural current source whose law mirrors
+ * The capacitor element lines. A fixed part is a plain capacitor; a biased part
+ * carries a charge expression whose derivative mirrors
  * `capacitanceAtVoltage` in `src/models/capacitor-types.ts`.
  */
 function capacitorElement(
@@ -112,13 +135,17 @@ function capacitorElement(
   if (!model.nonlinear) {
     return [`C${suffix} ${node} 0 ${spiceNumber(model.capacitance)}`];
   }
+  // ngspice integrates a nonlinear capacitor from its charge, so give it the
+  // closed-form charge rather than a current source. `atan` is the exact
+  // antiderivative of the n = 2 DC-bias law; it is smooth and, unlike a
+  // `C = <expr>` or `I = C(V) * ddt(v)` form, converges at the default step.
   const voltage = `v(${node})`;
   return [
-    `Bcap${suffix} ${node} 0 I = ` +
-      `(${spiceNumber(model.saturated)} + ` +
-      `(${spiceNumber(model.capacitance)} - ${spiceNumber(model.saturated)}) / ` +
-      `(1 + (abs(${voltage}) / ${spiceNumber(model.kneeVoltage)}) ** ` +
-      `${spiceNumber(model.exponent)})) * ddt(${voltage})`,
+    `C${suffix} ${node} 0 Q = (` +
+      `${spiceNumber(model.saturated)} * ${voltage} + ` +
+      `(${spiceNumber(model.capacitance)} - ${spiceNumber(model.saturated)}) * ` +
+      `${spiceNumber(model.kneeVoltage)} * atan(${voltage} / ` +
+      `${spiceNumber(model.kneeVoltage)}))`,
   ];
 }
 

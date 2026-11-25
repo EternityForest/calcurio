@@ -446,4 +446,46 @@ describe('CalculatorRuntime', () => {
     expect(runtime.state['voltage']).toBe(12000);
     expect(runtime.state['current']).toBe(120);
   });
+
+  it('lists computable peers as plot targets', () => {
+    const runtime = new CalculatorRuntime(doublingDefinition());
+    expect(runtime.graphTargets('a')).toEqual(['b']);
+    expect(runtime.graphTargets('c')).toEqual(['a', 'b']);
+    expect(() => runtime.graphTargets('missing')).toThrow(RangeError);
+  });
+
+  it('samples a target across an axis without touching live state', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.setDisplayText('resistance', '100');
+    runtime.setDisplayText('current', '120');
+    const before = runtime.state;
+
+    const sampler = runtime.beginSample('voltage', 'current');
+    expect(sampler.axis).toBe('voltage');
+    expect(sampler.target).toBe('current');
+    expect(sampler.sample(500)).toBeCloseTo(5, 9);
+    expect(sampler.sample(1000)).toBeCloseTo(10, 9);
+    expect(runtime.state).toEqual(before);
+
+    sampler.stop();
+    expect(() => sampler.sample(0)).toThrow(Error);
+    expect(runtime.state).toEqual(before);
+  });
+
+  it('reports null while the target cannot be computed', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.setDisplayText('resistance', '0');
+    const sampler = runtime.beginSample('voltage', 'current');
+    expect(sampler.sample(1000)).toBeNull();
+    sampler.stop();
+  });
+
+  it('rejects invalid plot pairs', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    expect(() => runtime.beginSample('voltage', 'voltage')).toThrow(RangeError);
+    expect(() => runtime.beginSample('voltage', 'missing')).toThrow(RangeError);
+
+    const doubling = new CalculatorRuntime(doublingDefinition());
+    expect(() => doubling.beginSample('a', 'c')).toThrow(RangeError);
+  });
 });

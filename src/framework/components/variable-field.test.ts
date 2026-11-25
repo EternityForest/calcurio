@@ -8,6 +8,7 @@ function fieldModel(
   overrides: Partial<NumberFieldModel> = {},
 ): NumberFieldModel {
   return {
+    kind: 'number',
     name: 'voltage',
     label: 'Voltage',
     description: 'Potential difference.',
@@ -18,12 +19,13 @@ function fieldModel(
     editable: true,
     computable: true,
     pinned: false,
+    plottable: true,
     issues: [],
     ...overrides,
   };
 }
 
-async function mount(model: FieldModel): Promise<VariableField> {
+async function mount(model: NumberFieldModel): Promise<VariableField> {
   const field = new VariableField();
   field.model = model;
   document.body.append(field);
@@ -153,5 +155,43 @@ describe('VariableField', () => {
     }
     button.click();
     expect(onCalculate).not.toHaveBeenCalled();
+  });
+
+  it('renders the Plot button for plottable fields', async () => {
+    const field = await mount(fieldModel());
+    expect(field.querySelector('button.calc-plot')).not.toBeNull();
+  });
+
+  it('hides the Plot button for non-plottable fields', async () => {
+    const field = await mount(fieldModel({ plottable: false }));
+    expect(field.querySelector('button.calc-plot')).toBeNull();
+  });
+
+  it('commits before plotting', async () => {
+    const field = await mount(fieldModel());
+    const onCommit = vi.fn(() => ({ ok: true }));
+    const onPlot = vi.fn();
+    field.onCommit = onCommit;
+    field.onPlot = onPlot;
+    const button = field.querySelector<HTMLButtonElement>('button.calc-plot');
+    if (button === null) {
+      throw new Error('Missing Plot button.');
+    }
+    button.click();
+    expect(onCommit).toHaveBeenCalledWith('12');
+    expect(onPlot).toHaveBeenCalled();
+  });
+
+  it('does not plot when the commit fails', async () => {
+    const field = await mount(fieldModel());
+    const onPlot = vi.fn();
+    field.onCommit = () => ({ ok: false, message: 'Bad value.' });
+    field.onPlot = onPlot;
+    const button = field.querySelector<HTMLButtonElement>('button.calc-plot');
+    if (button === null) {
+      throw new Error('Missing Plot button.');
+    }
+    button.click();
+    expect(onPlot).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import type { UnitSymbol } from '../units.js';
 import type { VariableDefinition } from '../types.js';
 import { isTableSelectVariable } from '../types.js';
 import { BookmarksDialog } from './bookmarks-dialog.js';
+import { GraphDialog } from './graph-dialog.js';
 import './variable-field.js';
 import type { FieldModel } from './variable-field.js';
 
@@ -33,6 +34,7 @@ export class CalculatorView extends LitElement {
   private resetArmed = false;
   private resetTimer: ReturnType<typeof setTimeout> | null = null;
   private dialog: BookmarksDialog | null = null;
+  private graphDialog: GraphDialog | null = null;
 
   override createRenderRoot(): HTMLElement {
     return this;
@@ -111,6 +113,10 @@ export class CalculatorView extends LitElement {
         .bookmarks=${this.bookmarks ?? null}
         @bookmark-loaded=${this.handleBookmarkLoaded}
       ></calc-bookmarks-dialog>
+      <calc-graph-dialog
+        ${ref(this.captureGraphDialog)}
+        .runtime=${runtime}
+      ></calc-graph-dialog>
     `;
   }
 
@@ -153,6 +159,8 @@ export class CalculatorView extends LitElement {
       placeholder: runtime.missingLabel(name),
       unit: runtime.displayUnitFor(name) ?? variable.unit,
       unitChoices: runtime.unitChoices(name),
+      plottable:
+        runtime.isEditable(name) && runtime.graphTargets(name).length > 0,
     };
 
     return html`
@@ -162,6 +170,7 @@ export class CalculatorView extends LitElement {
         .onUnitChange=${(unit: UnitSymbol) =>
           runtime.setDisplayUnit(name, unit)}
         .onCalculate=${() => runtime.calculate(name)}
+        .onPlot=${() => this.openGraph(name)}
       ></calc-variable-field>
     `;
   }
@@ -197,6 +206,14 @@ export class CalculatorView extends LitElement {
 
   private readonly captureDialog = (element?: Element): void => {
     this.dialog = element instanceof BookmarksDialog ? element : null;
+  };
+
+  private readonly captureGraphDialog = (element?: Element): void => {
+    this.graphDialog = element instanceof GraphDialog ? element : null;
+  };
+
+  private readonly openGraph = (name: string): void => {
+    this.graphDialog?.open(name);
   };
 
   private readonly handleBookmarkLoaded = (event: Event): void => {

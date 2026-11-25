@@ -61,6 +61,24 @@ export interface CalculatorSnapshot {
 /** Called after every state or display-unit change. */
 export type RuntimeListener = () => void;
 
+/**
+ * Evaluates one variable across hypothetical values of another without
+ * touching live state. Created by `CalculatorRuntime.beginSample`.
+ */
+export interface RuntimeSampler {
+  /** Variable being swept along the horizontal axis. */
+  readonly axis: string;
+  /** Computed variable being read for each axis value. */
+  readonly target: string;
+  /**
+   * Value of the target, in base units, for one axis value (also base units),
+   * or null when the target cannot be computed at that point.
+   */
+  sample(axisValue: number): number | null;
+  /** Releases the working state. Later calls to `sample` throw. */
+  stop(): void;
+}
+
 interface TableSelectBinding {
   readonly variable: TableSelectVariableDefinition;
   readonly table: TableDefinition;
@@ -110,6 +128,7 @@ export function nearlyEqual(
 export class CalculatorRuntime {
   readonly definition: CalculatorDefinition;
 
+  private readonly tables: TableResolver | undefined;
   private readonly variablesByName = new Map<string, VariableDefinition>();
   private readonly choicesByVariable = new Map<string, UnitSymbol[]>();
   private readonly displayUnits = new Map<string, UnitSymbol>();
@@ -132,6 +151,7 @@ export class CalculatorRuntime {
   constructor(definition: CalculatorDefinition, tables?: TableResolver) {
     validateCalculatorDefinition(definition);
     this.definition = definition;
+    this.tables = tables;
 
     for (const variable of definition.variables) {
       this.variablesByName.set(variable.name, variable);
@@ -218,6 +238,22 @@ export class CalculatorRuntime {
 
   isComputable(name: string): boolean {
     return this.derivedNameSet.has(name);
+  }
+
+  /**
+   * Names of the numeric variables that can be plotted against `axis`: every
+   * other computable variable, excluding table selects which have no number.
+   */
+  graphTargets(axis: string): readonly string[] {
+    this.requireVariable(axis);
+    return this.definition.variables
+      .filter(
+        (variable) =>
+          variable.name !== axis &&
+          !isTableSelectVariable(variable) &&
+          this.isComputable(variable.name),
+      )
+      .map((variable) => variable.name);
   }
 
   isEditable(name: string): boolean {
@@ -512,6 +548,57 @@ export class CalculatorRuntime {
     return {
       state: { ...this.values },
       units: Object.fromEntries(this.displayUnits),
+    };
+  }
+
+  /**
+   * Starts a sweep that reads `target` while `axis` takes hypothetical values,
+   * holding every other value at its current amount. Sampling runs on an
+   * isolated copy, so the live state is never disturbed. Call `stop` on the
+   * returned sampler when finished.
+   */
+  beginSample(axis: string, target: string): RuntimeSampler {
+    this.requireVariable(axis);
+    const targetVariable = this.requireVariable(target);
+    if (axis === target) {
+      throw new RangeError('A plot needs two different variables.');
+    }
+    if (!this.isComputable(target)) {
+      throw new RangeError(`${targetVariable.label} is not computable.`);
+    }
+
+    const probe = new CalculatorRuntime(this.definition, this.tables);
+    probe.values = { ...this.values };
+    probe.pinnedNames = new Set(this.pinnedNames);
+    probe.pinnedNames.add(axis);
+    probe.pinnedNames.delete(target);
+    probe.order = [...this.order];
+    probe.missingNeeds.clear();
+    probe.errorMessages = [];
+    probe.issues = [];
+    probe.converged = true;
+
+    let stopped = false;
+    return {
+      axis,
+      target,
+      sample(axisValue: number): number | null {
+        if (stopped) {
+          throw new Error('This plot session has already stopped.');
+        }
+        if (!Number.isFinite(axisValue)) {
+          return null;
+        }
+        probe.values[axis] = axisValue;
+        probe.pinnedNames.add(axis);
+        probe.missingNeeds.delete(axis);
+        probe.recompute();
+        const value = probe.values[target];
+        return typeof value === 'number' ? value : null;
+      },
+      stop(): void {
+        stopped = true;
+      },
     };
   }
 

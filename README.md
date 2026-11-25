@@ -162,6 +162,20 @@ derived from its global id (`<category>.<calculator>`) inside the
 `calcurio.bookmarks.v1` localStorage entry. The dialog supports filtering by
 name and deleting saved entries. No bookmark data is sent anywhere.
 
+## Graphs
+
+Every editable numeric field has a **Plot** button. It opens a dialog that
+puts that field on the X axis and lets you pick any other computable variable
+for the Y axis. The dialog edits the X unit, minimum, maximum, and number of
+steps; the range starts at the field's current value plus and minus 100%.
+
+Plotting samples the Y value on an isolated copy of the runtime, so the
+calculator's own state is never disturbed. Points are drawn in time-budgeted
+batches (about one frame each) and stream into the chart as they are
+computed, so a large sweep stays responsive and can be stopped at any time.
+Charts use [Chart.js](https://www.chartjs.org/) (MIT), loaded on demand the
+first time a plot runs.
+
 ## Deploying to GitHub Pages
 
 The build uses a relative `base`, so it works from a project subpath such as

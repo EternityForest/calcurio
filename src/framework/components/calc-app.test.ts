@@ -202,7 +202,7 @@ describe('CalcApp', () => {
     button(element, 'category-basic').click();
     await vi.waitFor(() => {
       expect(element.textContent).toContain(
-        'No calculators in this category yet.',
+        'Nothing in this category yet.',
       );
     });
   });

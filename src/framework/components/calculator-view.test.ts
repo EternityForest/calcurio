@@ -8,6 +8,7 @@ import { CalculatorRuntime } from '../runtime.js';
 import type { CalculatorDefinition } from '../types.js';
 import { CalculatorView } from './calculator-view.js';
 import { BookmarksDialog } from './bookmarks-dialog.js';
+import { GraphDialog } from './graph-dialog.js';
 
 class MemoryStorage implements KeyValueStorage {
   private readonly values = new Map<string, string>();
@@ -121,6 +122,20 @@ describe('CalculatorView', () => {
     const dialog = view.querySelector<BookmarksDialog>('calc-bookmarks-dialog');
     if (button === null || dialog === null) {
       throw new Error('Missing bookmarks controls.');
+    }
+    button.click();
+    await dialog.updateComplete;
+    expect(dialog.querySelector('dialog')?.open).toBe(true);
+  });
+
+  it('opens the graph dialog from a plot button', async () => {
+    const view = await mount(new CalculatorRuntime(doublingDefinition()), null);
+    const button = view.querySelector<HTMLButtonElement>(
+      '[data-testid="plot-a"]',
+    );
+    const dialog = view.querySelector<GraphDialog>('calc-graph-dialog');
+    if (button === null || dialog === null) {
+      throw new Error('Missing graph controls.');
     }
     button.click();
     await dialog.updateComplete;

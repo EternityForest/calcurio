@@ -32,6 +32,8 @@ export interface NumberFieldModel extends FieldBase {
   readonly placeholder: string;
   readonly unit: UnitSymbol;
   readonly unitChoices: readonly UnitSymbol[];
+  /** Whether this value can be plotted on the X axis of a graph. */
+  readonly plottable: boolean;
 }
 
 /** A dropdown that selects one row of a table. */
@@ -60,6 +62,7 @@ export class VariableField extends LitElement {
   onUnitChange: (unit: UnitSymbol) => void = () => {};
   onSelectionChange: (key: string) => ValueUpdateResult = () => ({ ok: true });
   onCalculate: () => void = () => {};
+  onPlot: () => void = () => {};
 
   private localError = '';
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -182,7 +185,7 @@ export class VariableField extends LitElement {
             `,
           )}
         </select>
-        ${this.renderCalculateButton(model)}
+        ${this.renderCalculateButton(model)} ${this.renderPlotButton(model)}
       </div>
     `;
   }
@@ -231,6 +234,25 @@ export class VariableField extends LitElement {
         @click=${this.handleCalculate}
       >
         Calculate
+      </button>
+    `;
+  }
+
+  private renderPlotButton(
+    model: NumberFieldModel,
+  ): TemplateResult | typeof nothing {
+    if (!model.plottable) {
+      return nothing;
+    }
+    return html`
+      <button
+        class="button calc-plot"
+        type="button"
+        title=${`Plot ${model.label} on the X axis`}
+        data-testid=${`plot-${model.name}`}
+        @click=${this.handlePlot}
+      >
+        Plot
       </button>
     `;
   }
@@ -303,6 +325,13 @@ export class VariableField extends LitElement {
     }
     if (this.commitNow()) {
       this.onCalculate();
+    }
+  };
+
+  private readonly handlePlot = (): void => {
+    this.cancelTimer();
+    if (this.commitNow()) {
+      this.onPlot();
     }
   };
 

@@ -68,7 +68,7 @@ describe('runCalculatorTests', () => {
     };
 
     const failures = runCalculatorTests(definition);
-    expect(failures).toHaveLength(3);
+    expect(failures).toHaveLength(7);
     const mismatches = failures.filter((failure) => failure.variable === 'a');
     expect(mismatches).toHaveLength(2);
     expect(mismatches[0]?.message).toContain('expected 2');
@@ -77,7 +77,7 @@ describe('runCalculatorTests', () => {
       failures.some(
         (failure) =>
           failure.variable === null &&
-          failure.message.includes('cannot all hold at once'),
+          failure.message.includes('does not match the other values'),
       ),
     ).toBe(true);
   });
@@ -170,7 +170,7 @@ describe('assertCalculatorTests', () => {
     };
 
     expect(() => assertCalculatorTests(definition)).toThrow(
-      'Calculator "wrong" failed 2 check(s)',
+      'Calculator "wrong" failed 3 check(s)',
     );
     expect(() => assertCalculatorTests(definition)).toThrow('case 1 [a]');
   });

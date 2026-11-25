@@ -71,7 +71,7 @@ export type VariableDefinition =
 export function isTableSelectVariable(
   variable: VariableDefinition,
 ): variable is TableSelectVariableDefinition {
-  return variable.table !== undefined;
+  return 'table' in variable;
 }
 
 /** True when a numeric variable reads one column of a table selection. */

@@ -1,5 +1,9 @@
 import { CalculatorDefinitionError } from './errors.js';
-import type { CalculatorDefinition, VariableDefinition } from './types.js';
+import type {
+  CalculatorDefinition,
+  TableSelectVariableDefinition,
+  VariableDefinition,
+} from './types.js';
 import { isTableFieldVariable, isTableSelectVariable } from './types.js';
 import { measureOf, tryDescribeUnit } from './units.js';
 import type { UnitSymbol } from './units.js';
@@ -135,7 +139,7 @@ export function validateCalculatorDefinition(
 
 function validateTableSelect(
   where: string,
-  variable: VariableDefinition,
+  variable: TableSelectVariableDefinition,
   problems: string[],
 ): void {
   if (!isValidIdentifier(variable.table ?? '')) {
@@ -143,21 +147,21 @@ function validateTableSelect(
       `${where}: table must be a lowercase, hyphenated table id.`,
     );
   }
-  if (variable.unit !== undefined) {
+  if ('unit' in variable) {
     problems.push(`${where}: a table-select variable must not have a unit.`);
   }
-  if (variable.unitOptions !== undefined) {
+  if ('unitOptions' in variable) {
     problems.push(
       `${where}: a table-select variable must not have unit options.`,
     );
   }
-  if (variable.computable !== undefined) {
+  if ('computable' in variable) {
     problems.push(
       `${where}: a table-select variable is derived and must not have a ` +
         'computable function.',
     );
   }
-  if (variable.tableSelect !== undefined || variable.tableField !== undefined) {
+  if ('tableSelect' in variable || 'tableField' in variable) {
     problems.push(
       `${where}: a table-select variable cannot also reference another ` +
         'table select.',

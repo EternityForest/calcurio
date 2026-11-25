@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CalculatorDefinitionError } from './errors.js';
 import type { CalculatorDefinition } from './types.js';
+import { isTableSelectVariable } from './types.js';
 import type { UnitSymbol } from './units.js';
 import { isValidIdentifier, validateCalculatorDefinition } from './validate.js';
 
@@ -158,13 +159,17 @@ describe('validateCalculatorDefinition', () => {
 
   it('rejects a definition without a computable variable', () => {
     const definition = baseDefinition();
+    const withoutComputable = definition.variables.map((variable) => {
+      if (isTableSelectVariable(variable)) {
+        return variable;
+      }
+      const { computable: _computable, ...rest } = variable;
+      return rest;
+    });
     expect(() =>
       validateCalculatorDefinition({
         ...definition,
-        variables: definition.variables.map((variable) => {
-          const { computable: _computable, ...rest } = variable;
-          return rest;
-        }),
+        variables: withoutComputable,
       }),
     ).toThrow(CalculatorDefinitionError);
   });

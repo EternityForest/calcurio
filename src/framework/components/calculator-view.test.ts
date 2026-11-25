@@ -6,6 +6,7 @@ import type { KeyValueStorage } from '../bookmarks.js';
 import { missing } from '../missing.js';
 import { CalculatorRuntime } from '../runtime.js';
 import type { CalculatorDefinition } from '../types.js';
+import { unchanged } from '../unchanged.js';
 import { CalculatorView } from './calculator-view.js';
 import { BookmarksDialog } from './bookmarks-dialog.js';
 import { GraphDialog } from './graph-dialog.js';
@@ -194,5 +195,129 @@ describe('CalculatorView', () => {
       '[data-testid="value-b"]',
     );
     expect(input?.value).toBe('1');
+  });
+});
+
+function computeStateDefinition(
+  computeState: NonNullable<CalculatorDefinition['computeState']>,
+): CalculatorDefinition {
+  return {
+    id: 'compute-state',
+    title: 'Compute state',
+    variables: [
+      { name: 'a', label: 'A', unit: 'V' },
+      { name: 'b', label: 'B', unit: 'V' },
+      { name: 'sum', label: 'Sum', unit: 'V', computable: () => unchanged() },
+    ],
+    computeState,
+  };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+function requireButton(view: CalculatorView, testId: string): HTMLButtonElement {
+  const button = view.querySelector<HTMLButtonElement>(
+    `[data-testid="${testId}"]`,
+  );
+  if (button === null) {
+    throw new Error(`Missing ${testId} button.`);
+  }
+  return button;
+}
+
+function readyRuntime(
+  computeState: NonNullable<CalculatorDefinition['computeState']>,
+): CalculatorRuntime {
+  const runtime = new CalculatorRuntime(computeStateDefinition(computeState));
+  runtime.setDisplayText('a', '1');
+  runtime.setDisplayText('b', '2');
+  return runtime;
+}
+
+describe('CalculatorView computeState', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('hides calculate and plot controls in computeState mode', async () => {
+    const view = await mount(readyRuntime((state) => ({ ...state })), null);
+    expect(view.querySelectorAll('calc-variable-field')).toHaveLength(3);
+    expect(view.querySelector('[data-testid="plot-a"]')).toBeNull();
+    expect(view.querySelector('[data-testid="calculate-a"]')).toBeNull();
+    expect(view.querySelector('[data-testid="run"]')).not.toBeNull();
+    expect(requireButton(view, 'cancel').disabled).toBe(true);
+  });
+
+  it('runs computeState from the Run button and merges the result', async () => {
+    const view = await mount(
+      readyRuntime((state) => ({ ...state, sum: 3 })),
+      null,
+    );
+    requireButton(view, 'run').click();
+    await vi.waitFor(() => {
+      const input = view.querySelector<HTMLInputElement>(
+        '[data-testid="value-sum"]',
+      );
+      expect(input?.value).toBe('3');
+    });
+  });
+
+  it('shows output items and replaces them on the next run', async () => {
+    let message = 'Run one';
+    const runtime = readyRuntime((state, context) => {
+      context.display(message);
+      return { ...state };
+    });
+    const view = await mount(runtime, null);
+
+    requireButton(view, 'run').click();
+    await vi.waitFor(() => {
+      expect(view.textContent).toContain('Run one');
+    });
+    expect(view.querySelectorAll('.calc-output > *')).toHaveLength(1);
+
+    await vi.waitFor(() => {
+      expect(requireButton(view, 'run').disabled).toBe(false);
+    });
+    message = 'Run two';
+    requireButton(view, 'run').click();
+    await vi.waitFor(() => {
+      expect(view.textContent).toContain('Run two');
+    });
+    expect(view.textContent).not.toContain('Run one');
+    expect(view.querySelectorAll('.calc-output > *')).toHaveLength(1);
+  });
+
+  it('cancels a running computeState from the Cancel button', async () => {
+    const gate = deferred<void>();
+    const runtime = readyRuntime(async (state, context) => {
+      context.display('Started');
+      await gate.promise;
+      return { ...state, sum: 99 };
+    });
+    const view = await mount(runtime, null);
+
+    requireButton(view, 'run').click();
+    await vi.waitFor(() => {
+      expect(runtime.isRunning).toBe(true);
+    });
+    await view.updateComplete;
+    expect(requireButton(view, 'run').disabled).toBe(true);
+    expect(requireButton(view, 'cancel').disabled).toBe(false);
+
+    requireButton(view, 'cancel').click();
+    gate.resolve();
+    await vi.waitFor(() => {
+      expect(runtime.isRunning).toBe(false);
+    });
+    await view.updateComplete;
+    expect(requireButton(view, 'cancel').disabled).toBe(true);
+    expect(runtime.state['sum']).toBeNull();
   });
 });

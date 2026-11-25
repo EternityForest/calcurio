@@ -5,7 +5,11 @@ import {
 } from './errors.js';
 import { formatNumber, parseNumberText } from './format.js';
 import { isMissing } from './missing.js';
-import type { MissingValue } from './missing.js';
+import type {
+  ComputeStateContext,
+  OutputDisplayContent,
+  OutputDisplayItem,
+} from './output.js';
 import {
   findColumn,
   findRow,
@@ -30,6 +34,7 @@ import {
   isTableFieldVariable,
   isTableSelectVariable,
 } from './types.js';
+import { isUnchanged } from './unchanged.js';
 import { choicesForUnit, convertUnit, measureOf } from './units.js';
 import type { UnitSymbol } from './units.js';
 import { validateCalculatorDefinition } from './validate.js';
@@ -147,6 +152,8 @@ export class CalculatorRuntime {
   private converged = true;
   private errorMessages: string[] = [];
   private issues: ValidationIssue[] = [];
+  private runController: AbortController | null = null;
+  private displayItems: OutputDisplayItem[] = [];
 
   constructor(definition: CalculatorDefinition, tables?: TableResolver) {
     validateCalculatorDefinition(definition);
@@ -155,7 +162,7 @@ export class CalculatorRuntime {
 
     for (const variable of definition.variables) {
       this.variablesByName.set(variable.name, variable);
-      this.values[variable.name] = null;
+      this.values[variable.name] = this.initialValue(variable);
       if (!isTableSelectVariable(variable)) {
         this.choicesByVariable.set(
           variable.name,
@@ -195,6 +202,40 @@ export class CalculatorRuntime {
 
   get validationIssues(): readonly ValidationIssue[] {
     return [...this.issues];
+  }
+
+  /** True when the definition computes every derived value in one call. */
+  get hasComputeState(): boolean {
+    return this.definition.computeState !== undefined;
+  }
+
+  /** True while an async `computeState` run is in flight. */
+  get isRunning(): boolean {
+    return this.runController !== null;
+  }
+
+  /**
+   * Content produced by the last `computeState` run. Items are discarded
+   * before the next run begins.
+   */
+  get outputDisplay(): readonly OutputDisplayItem[] {
+    return [...this.displayItems];
+  }
+
+  /**
+   * True when a `computeState` run can start: the calculator must have a
+   * `computeState` and every editable input must hold a value.
+   */
+  canRunComputeState(): boolean {
+    if (!this.hasComputeState || this.isRunning) {
+      return false;
+    }
+    return this.definition.variables.every((variable) => {
+      if (this.isComputable(variable.name)) {
+        return true;
+      }
+      return this.values[variable.name] !== null;
+    });
   }
 
   /** Derived variables in the order they are solved. */
@@ -438,6 +479,59 @@ export class CalculatorRuntime {
   }
 
   /**
+   * Runs the definition's `computeState` against a private, frozen copy of the
+   * current values and merges whatever it returns. Derived values are never
+   * recomputed from edits in this mode; the state only changes when this method
+   * runs. Rejects a concurrent call. Cancelling resolves without an error.
+   */
+  async computeState(): Promise<void> {
+    const compute = this.definition.computeState;
+    if (compute === undefined) {
+      throw new Error(`${this.definition.title} has no computeState.`);
+    }
+    if (this.runController !== null) {
+      throw new Error('A calculation is already running.');
+    }
+
+    const controller = new AbortController();
+    this.runController = controller;
+    this.clearDisplay();
+    this.errorMessages = [];
+    this.emit();
+
+    const snapshot = Object.freeze({ ...this.values });
+    const context: ComputeStateContext = {
+      signal: controller.signal,
+      display: (content, dispose) => {
+        this.addDisplayItem(controller, content, dispose);
+      },
+    };
+
+    try {
+      const result = await compute(snapshot, context);
+      if (!controller.signal.aborted) {
+        this.applyComputedState(result);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        this.addError(
+          `${this.definition.title} failed: ${errorMessage(error)}`,
+        );
+      }
+    } finally {
+      if (this.runController === controller) {
+        this.runController = null;
+      }
+      this.emit();
+    }
+  }
+
+  /** Cancels the in-flight `computeState` run, if any. */
+  cancelComputeState(): void {
+    this.runController?.abort();
+  }
+
+  /**
    * Recomputes every unpinned variable in order. When a value changes and the
    * variable is an input, another pass starts. More than
    * `MAX_REFINEMENT_ROUNDS` passes raises a visible error.
@@ -478,8 +572,10 @@ export class CalculatorRuntime {
 
   /** Clears every value, display unit, and compute-order change. */
   reset(): void {
+    this.cancelComputeState();
+    this.clearDisplay();
     for (const variable of this.definition.variables) {
-      this.values[variable.name] = null;
+      this.values[variable.name] = this.initialValue(variable);
       if (!isTableSelectVariable(variable)) {
         this.displayUnits.set(variable.name, variable.unit);
       }
@@ -499,6 +595,8 @@ export class CalculatorRuntime {
     units?: Readonly<Record<string, UnitSymbol>>,
   ): void {
     this.assertValidState(state);
+    this.cancelComputeState();
+    this.clearDisplay();
 
     const displayUnits = new Map<string, UnitSymbol>();
     for (const variable of this.definition.variables) {
@@ -699,6 +797,20 @@ export class CalculatorRuntime {
     );
   }
 
+  /**
+   * Starting value for a variable. Only plain numeric variables can declare a
+   * default; derived and table-backed variables always start empty.
+   */
+  private initialValue(variable: VariableDefinition): CalcValue {
+    if (isTableSelectVariable(variable)) {
+      return null;
+    }
+    if (variable.computable !== undefined || isTableFieldVariable(variable)) {
+      return null;
+    }
+    return variable.default ?? null;
+  }
+
   private computeVariable(name: string): boolean {
     const variable = this.requireVariable(name);
     if (isTableSelectVariable(variable)) {
@@ -720,7 +832,7 @@ export class CalculatorRuntime {
       return false;
     }
 
-    let result: number | MissingValue;
+    let result: unknown;
     try {
       result = computable(Object.freeze({ ...this.values }));
     } catch (error) {
@@ -728,11 +840,15 @@ export class CalculatorRuntime {
       return false;
     }
 
+    if (isUnchanged(result)) {
+      return false;
+    }
+
     let next: CalcValue;
     if (isMissing(result)) {
       this.missingNeeds.set(name, [...result.needs]);
       next = null;
-    } else if (!Number.isFinite(result)) {
+    } else if (typeof result !== 'number' || !Number.isFinite(result)) {
       this.addError(`${variable.label} produced a non-finite value.`);
       return false;
     } else {
@@ -901,6 +1017,9 @@ export class CalculatorRuntime {
    * sources that may not exist.
    */
   private resolvePinnedDeadlock(): void {
+    if (this.hasComputeState) {
+      return;
+    }
     const allPinned = this.derivedNames.every((name) =>
       this.pinnedNames.has(name),
     );
@@ -939,8 +1058,11 @@ export class CalculatorRuntime {
       return false;
     }
     try {
-      const result = computable(Object.freeze({ ...this.values }));
-      return !isMissing(result) && Number.isFinite(result);
+      const result: unknown = computable(Object.freeze({ ...this.values }));
+      if (isUnchanged(result) || isMissing(result)) {
+        return false;
+      }
+      return typeof result === 'number' && Number.isFinite(result);
     } catch {
       return false;
     }
@@ -1007,13 +1129,16 @@ export class CalculatorRuntime {
     if (computable === undefined) {
       return false;
     }
-    let result: number | MissingValue;
+    let result: unknown;
     try {
       result = computable(Object.freeze({ ...this.values, [name]: null }));
     } catch {
       return false;
     }
-    if (isMissing(result) || !Number.isFinite(result)) {
+    if (isUnchanged(result) || isMissing(result)) {
+      return false;
+    }
+    if (typeof result !== 'number' || !Number.isFinite(result)) {
       return false;
     }
     return typeof current !== 'number' || !nearlyEqual(current, result);
@@ -1095,6 +1220,62 @@ export class CalculatorRuntime {
     if (!this.errorMessages.includes(message)) {
       this.errorMessages.push(message);
     }
+  }
+
+  /** Removes every display item, running its dispose hook. */
+  private clearDisplay(): void {
+    const items = this.displayItems;
+    this.displayItems = [];
+    for (const item of items) {
+      item.dispose?.();
+    }
+  }
+
+  /** Adds one display item for the current run, ignoring late callbacks. */
+  private addDisplayItem(
+    controller: AbortController,
+    content: OutputDisplayContent,
+    dispose: (() => void) | undefined,
+  ): void {
+    if (controller.signal.aborted || this.runController !== controller) {
+      dispose?.();
+      return;
+    }
+    this.displayItems.push(
+      dispose === undefined ? { content } : { content, dispose },
+    );
+    this.emit();
+  }
+
+  /**
+   * Merges the state returned by `computeState`. Unknown keys and values of
+   * the wrong type are ignored so a faulty calculation cannot corrupt the
+   * runtime.
+   */
+  private applyComputedState(result: CalcState): void {
+    if (
+      typeof result !== 'object' ||
+      result === null ||
+      Array.isArray(result)
+    ) {
+      this.addError('Calculation returned an invalid state.');
+      return;
+    }
+    for (const [name, value] of Object.entries(result)) {
+      if (!this.variablesByName.has(name)) {
+        continue;
+      }
+      const candidate: unknown = value;
+      if (
+        candidate !== null &&
+        typeof candidate !== 'number' &&
+        typeof candidate !== 'string'
+      ) {
+        continue;
+      }
+      this.values[name] = value;
+    }
+    this.recompute();
   }
 
   private requireVariable(name: string): VariableDefinition {

@@ -13,14 +13,27 @@ export type ResistanceUnit = 'Ω' | 'mΩ' | 'kΩ' | 'MΩ';
 /** Units added by Calcurio because the library has no resistivity measure. */
 export type ResistivityUnit = 'Ω·m' | 'Ω·mm²/m' | 'Ω·cm' | 'nΩ·m' | 'µΩ·cm';
 
+/** Units added by Calcurio because the library has no inductance measure. */
+export type InductanceUnit = 'H' | 'mH' | 'µH' | 'nH';
+
+/** Units added by Calcurio because the library has no capacitance measure. */
+export type CapacitanceUnit = 'F' | 'mF' | 'µF' | 'nF' | 'pF';
+
 /** Every unit a calculator variable may use. */
 export type UnitSymbol =
   | AllMeasuresUnits
   | ResistanceUnit
-  | ResistivityUnit;
+  | ResistivityUnit
+  | InductanceUnit
+  | CapacitanceUnit;
 
 /** Every measurement kind the unit registry understands. */
-export type MeasureName = AllMeasures | 'resistance' | 'resistivity';
+export type MeasureName =
+  | AllMeasures
+  | 'resistance'
+  | 'resistivity'
+  | 'inductance'
+  | 'capacitance';
 
 type SystemName = AllMeasuresSystems;
 
@@ -83,10 +96,63 @@ const resistivity: Measure<SystemName, ResistivityUnit> = {
   },
 };
 
+const inductance: Measure<SystemName, InductanceUnit> = {
+  systems: {
+    SI: {
+      nH: {
+        name: { singular: 'Nanohenry', plural: 'Nanohenries' },
+        to_anchor: 1e-9,
+      },
+      'µH': {
+        name: { singular: 'Microhenry', plural: 'Microhenries' },
+        to_anchor: 1e-6,
+      },
+      mH: {
+        name: { singular: 'Millihenry', plural: 'Millihenries' },
+        to_anchor: 1e-3,
+      },
+      H: {
+        name: { singular: 'Henry', plural: 'Henries' },
+        to_anchor: 1,
+      },
+    },
+  },
+};
+
+const capacitance: Measure<SystemName, CapacitanceUnit> = {
+  systems: {
+    SI: {
+      pF: {
+        name: { singular: 'Picofarad', plural: 'Picofarads' },
+        to_anchor: 1e-12,
+      },
+      nF: {
+        name: { singular: 'Nanofarad', plural: 'Nanofarads' },
+        to_anchor: 1e-9,
+      },
+      'µF': {
+        name: { singular: 'Microfarad', plural: 'Microfarads' },
+        to_anchor: 1e-6,
+      },
+      mF: {
+        name: { singular: 'Millifarad', plural: 'Millifarads' },
+        to_anchor: 1e-3,
+      },
+      // Farad is added after `temperature` so that it wins the "F" symbol.
+      F: {
+        name: { singular: 'Farad', plural: 'Farads' },
+        to_anchor: 1,
+      },
+    },
+  },
+};
+
 const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   ...allMeasures,
   resistance,
   resistivity,
+  inductance,
+  capacitance,
 };
 
 const convert = configureMeasurements(measures);

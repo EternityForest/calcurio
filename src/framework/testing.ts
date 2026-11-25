@@ -58,6 +58,12 @@ export function runCalculatorTests(
       failures,
     );
 
+    // A `computeState` calculator never solves single variables: the whole
+    // state is produced at once, so only the full-state check applies.
+    if (definition.computeState !== undefined) {
+      continue;
+    }
+
     for (const variable of definition.variables) {
       if (!isSolvable(variable)) {
         continue;

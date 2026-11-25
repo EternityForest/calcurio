@@ -7,7 +7,12 @@ import {
   MAX_REFINEMENT_ROUNDS,
   nearlyEqual,
 } from './runtime.js';
-import type { CalculatorDefinition, VariableDefinition } from './types.js';
+import type {
+  CalcState,
+  CalculatorDefinition,
+  VariableDefinition,
+} from './types.js';
+import { unchanged } from './unchanged.js';
 
 type MutableDefinition = Omit<CalculatorDefinition, 'variables'> & {
   variables: VariableDefinition[];
@@ -487,5 +492,260 @@ describe('CalculatorRuntime', () => {
 
     const doubling = new CalculatorRuntime(doublingDefinition());
     expect(() => doubling.beginSample('a', 'c')).toThrow(RangeError);
+  });
+});
+
+function computeStateDefinition(
+  computeState: NonNullable<CalculatorDefinition['computeState']>,
+): CalculatorDefinition {
+  return {
+    id: 'compute-state',
+    title: 'Compute state',
+    variables: [
+      { name: 'a', label: 'A', unit: 'V' },
+      { name: 'b', label: 'B', unit: 'V' },
+      { name: 'sum', label: 'Sum', unit: 'V', computable: () => unchanged() },
+    ],
+    computeState,
+  };
+}
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+describe('computeState', () => {
+  it('reports the computeState mode', () => {
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state) => ({ ...state })),
+    );
+    expect(runtime.hasComputeState).toBe(true);
+    expect(runtime.isRunning).toBe(false);
+    expect(runtime.outputDisplay).toEqual([]);
+  });
+
+  it('runs computeState and merges the returned state', async () => {
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state) => ({ ...state, sum: 3 })),
+    );
+    runtime.setDisplayText('a', '1');
+    runtime.setDisplayText('b', '2');
+    expect(runtime.state['sum']).toBeNull();
+
+    await runtime.computeState();
+    expect(runtime.state['sum']).toBe(3);
+    expect(runtime.isRunning).toBe(false);
+    expect(runtime.errors).toEqual([]);
+  });
+
+  it('does not recompute derived values from edits in computeState mode', () => {
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state) => ({ ...state })),
+    );
+    runtime.setDisplayText('a', '1');
+    runtime.setDisplayText('b', '2');
+    expect(runtime.state['sum']).toBeNull();
+  });
+
+  it('hands computeState a frozen copy of the live state', async () => {
+    let received: Readonly<CalcState> | null = null;
+    let frozen = false;
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state) => {
+        received = state;
+        frozen = Object.isFrozen(state);
+        return { ...state };
+      }),
+    );
+    runtime.setDisplayText('a', '1');
+    await runtime.computeState();
+
+    expect(frozen).toBe(true);
+    expect(received).toEqual({ a: 1, b: null, sum: null });
+    runtime.setDisplayText('a', '5');
+    expect(received!['a']).toBe(1);
+  });
+
+  it('only starts a run once every input has a value', () => {
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state) => ({ ...state })),
+    );
+    expect(runtime.canRunComputeState()).toBe(false);
+    runtime.setDisplayText('a', '1');
+    expect(runtime.canRunComputeState()).toBe(false);
+    runtime.setDisplayText('b', '2');
+    expect(runtime.canRunComputeState()).toBe(true);
+  });
+
+  it('never allows a run without computeState', () => {
+    const runtime = new CalculatorRuntime(doublingDefinition());
+    expect(runtime.canRunComputeState()).toBe(false);
+    expect(runtime.hasComputeState).toBe(false);
+  });
+
+  it('rejects a concurrent run', async () => {
+    const gate = deferred<CalcState>();
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition(() => gate.promise),
+    );
+    const run = runtime.computeState();
+    expect(runtime.isRunning).toBe(true);
+    await expect(runtime.computeState()).rejects.toThrow('already running');
+    gate.resolve({});
+    await run;
+    expect(runtime.isRunning).toBe(false);
+  });
+
+  it('cancels an in-flight run and discards its result', async () => {
+    const gate = deferred<CalcState>();
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition(() => gate.promise),
+    );
+    runtime.setDisplayText('a', '1');
+    const run = runtime.computeState();
+    runtime.cancelComputeState();
+    gate.resolve({ a: 1, b: null, sum: 99 });
+    await run;
+    expect(runtime.isRunning).toBe(false);
+    expect(runtime.state['sum']).toBeNull();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  it('aborts the signal handed to computeState', async () => {
+    const gate = deferred<void>();
+    let signal: AbortSignal | null = null;
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition(async (state, context) => {
+        signal = context.signal;
+        await gate.promise;
+        return { ...state };
+      }),
+    );
+    const run = runtime.computeState();
+    expect(signal).not.toBeNull();
+    expect(signal!.aborted).toBe(false);
+    runtime.cancelComputeState();
+    expect(signal!.aborted).toBe(true);
+    gate.resolve();
+    await run;
+  });
+
+  it('reports a computeState failure', async () => {
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition(() => {
+        throw new Error('boom');
+      }),
+    );
+    await runtime.computeState();
+    expect(runtime.errors).toHaveLength(1);
+    expect(runtime.errors[0]).toContain('failed: boom');
+    expect(runtime.isRunning).toBe(false);
+  });
+
+  it('rejects an invalid state returned by computeState', async () => {
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition(() => null as unknown as CalcState),
+    );
+    await runtime.computeState();
+    expect(runtime.errors[0]).toContain('invalid state');
+  });
+
+  it('clears the display before the next run and calls dispose', async () => {
+    const dispose = vi.fn();
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state, context) => {
+        context.display('first');
+        context.display('second', dispose);
+        return { ...state };
+      }),
+    );
+
+    await runtime.computeState();
+    expect(runtime.outputDisplay).toHaveLength(2);
+    expect(runtime.outputDisplay[0]?.content).toBe('first');
+    expect(runtime.outputDisplay[1]?.content).toBe('second');
+    expect(dispose).not.toHaveBeenCalled();
+
+    await runtime.computeState();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(runtime.outputDisplay).toHaveLength(2);
+  });
+
+  it('clears the display on reset', async () => {
+    const dispose = vi.fn();
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition((state, context) => {
+        context.display('x', dispose);
+        return { ...state };
+      }),
+    );
+    await runtime.computeState();
+    expect(runtime.outputDisplay).toHaveLength(1);
+    runtime.reset();
+    expect(runtime.outputDisplay).toEqual([]);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores display items added after cancellation', async () => {
+    const dispose = vi.fn();
+    const gate = deferred<void>();
+    const runtime = new CalculatorRuntime(
+      computeStateDefinition(async (state, context) => {
+        await gate.promise;
+        context.display('late', dispose);
+        return { ...state };
+      }),
+    );
+    const run = runtime.computeState();
+    runtime.cancelComputeState();
+    gate.resolve();
+    await run;
+    expect(runtime.outputDisplay).toEqual([]);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('throws when computeState is missing', async () => {
+    const runtime = new CalculatorRuntime(doublingDefinition());
+    await expect(runtime.computeState()).rejects.toThrow(
+      'has no computeState',
+    );
+  });
+});
+
+describe('defaults', () => {
+  it('starts plain inputs at their default and restores them on reset', () => {
+    const definition: CalculatorDefinition = {
+      id: 'defaults',
+      title: 'Defaults',
+      variables: [
+        { name: 'step', label: 'Step', unit: 's', default: 100 },
+        { name: 'length', label: 'Length', unit: 's', default: 0.1 },
+        {
+          name: 'double',
+          label: 'Double',
+          unit: 's',
+          computable: (state) =>
+            state['step'] === null
+              ? missing(['step'])
+              : (state['step'] as number) * 2,
+        },
+      ],
+    };
+    const runtime = new CalculatorRuntime(definition);
+    expect(runtime.state['step']).toBe(100);
+    expect(runtime.state['length']).toBe(0.1);
+    expect(runtime.state['double']).toBe(200);
+
+    runtime.setDisplayText('step', '250');
+    expect(runtime.state['double']).toBe(500);
+
+    runtime.reset();
+    expect(runtime.state['step']).toBe(100);
+    expect(runtime.state['length']).toBe(0.1);
+    expect(runtime.state['double']).toBe(200);
   });
 });

@@ -3,6 +3,7 @@ import type { PropertyValues, TemplateResult } from 'lit';
 import { ref } from 'lit/directives/ref.js';
 import type { BookmarkStore } from '../bookmarks.js';
 import { errorMessage } from '../errors.js';
+import type { OutputDisplayItem } from '../output.js';
 import type { CalculatorRuntime, ValueUpdateResult } from '../runtime.js';
 import type { UnitSymbol } from '../units.js';
 import type { VariableDefinition } from '../types.js';
@@ -35,6 +36,8 @@ export class CalculatorView extends LitElement {
   private resetTimer: ReturnType<typeof setTimeout> | null = null;
   private dialog: BookmarksDialog | null = null;
   private graphDialog: GraphDialog | null = null;
+  private outputContainer: HTMLElement | null = null;
+  private readonly stringNodes = new Map<number, HTMLParagraphElement>();
 
   override createRenderRoot(): HTMLElement {
     return this;
@@ -54,10 +57,15 @@ export class CalculatorView extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has('runtime')) {
       this.detachRuntime();
+      this.stringNodes.clear();
       if (this.isConnected) {
         this.attachRuntime();
       }
     }
+  }
+
+  override updated(): void {
+    this.syncOutput();
   }
 
   override render(): TemplateResult | typeof nothing {
@@ -99,7 +107,13 @@ export class CalculatorView extends LitElement {
           >
             Bookmarks
           </button>
+          ${runtime.hasComputeState ? this.renderRunActions(runtime) : nothing}
         </div>
+        ${
+          runtime.hasComputeState
+            ? html`<div class="calc-output" ${ref(this.captureOutput)}></div>`
+            : nothing
+        }
         ${
           this.status === ''
             ? nothing
@@ -125,12 +139,14 @@ export class CalculatorView extends LitElement {
     variable: VariableDefinition,
   ): TemplateResult {
     const name = variable.name;
+    const runMode = runtime.hasComputeState;
+    const output = runMode && runtime.isComputable(name);
     const base = {
       name,
       label: variable.label,
       description: variable.description ?? '',
-      editable: runtime.isEditable(name),
-      computable: runtime.isComputable(name),
+      editable: runtime.isEditable(name) && !output,
+      computable: runtime.isComputable(name) && !runMode,
       pinned: runtime.isPinned(name),
       issues: runtime.issuesFor(name).map((issue) => issue.message),
     };
@@ -160,7 +176,9 @@ export class CalculatorView extends LitElement {
       unit: runtime.displayUnitFor(name) ?? variable.unit,
       unitChoices: runtime.unitChoices(name),
       plottable:
-        runtime.isEditable(name) && runtime.graphTargets(name).length > 0,
+        !runMode &&
+        runtime.isEditable(name) &&
+        runtime.graphTargets(name).length > 0,
     };
 
     return html`
@@ -203,6 +221,90 @@ export class CalculatorView extends LitElement {
       </div>
     `;
   }
+
+  private renderRunActions(runtime: CalculatorRuntime): TemplateResult {
+    const running = runtime.isRunning;
+    return html`
+      <button
+        class="button"
+        type="button"
+        data-testid="run"
+        ?disabled=${running || !runtime.canRunComputeState()}
+        @click=${this.handleRun}
+      >
+        Run simulation
+      </button>
+      <button
+        class="button danger"
+        type="button"
+        data-testid="cancel"
+        ?disabled=${!running}
+        @click=${this.handleCancel}
+      >
+        Cancel
+      </button>
+    `;
+  }
+
+  /** Renders `computeState` output below the fields, once per run. */
+  private syncOutput(): void {
+    const container = this.outputContainer;
+    if (container === null) {
+      return;
+    }
+    const runtime = this.runtime;
+    const items = runtime === undefined ? [] : runtime.outputDisplay;
+    if (items.length === 0) {
+      this.stringNodes.clear();
+    }
+    const nodes: Node[] = [];
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      if (item !== undefined) {
+        nodes.push(this.nodeFor(item, index));
+      }
+    }
+    if (!sameChildren(container, nodes)) {
+      container.replaceChildren(...nodes);
+    }
+  }
+
+  /** Returns the DOM node for one display item, wrapping plain text. */
+  private nodeFor(item: OutputDisplayItem, index: number): Node {
+    if (typeof item.content !== 'string') {
+      return item.content;
+    }
+    let node = this.stringNodes.get(index);
+    if (node === undefined) {
+      node = document.createElement('p');
+      node.className = 'calc-output-text';
+      this.stringNodes.set(index, node);
+    }
+    if (node.textContent !== item.content) {
+      node.textContent = item.content;
+    }
+    return node;
+  }
+
+  private readonly captureOutput = (element?: Element): void => {
+    this.outputContainer = element instanceof HTMLElement ? element : null;
+  };
+
+  private readonly handleRun = (): void => {
+    const runtime = this.runtime;
+    if (runtime === undefined || runtime.isRunning) {
+      return;
+    }
+    this.status = '';
+    runtime.computeState().catch((error) => {
+      this.status = `Could not run: ${errorMessage(error)}`;
+      this.requestUpdate();
+    });
+  };
+
+  private readonly handleCancel = (): void => {
+    this.runtime?.cancelComputeState();
+  };
 
   private readonly captureDialog = (element?: Element): void => {
     this.dialog = element instanceof BookmarksDialog ? element : null;
@@ -274,6 +376,19 @@ export class CalculatorView extends LitElement {
       this.resetTimer = null;
     }
   }
+}
+
+/** True when the container already holds exactly these nodes in order. */
+function sameChildren(container: HTMLElement, nodes: readonly Node[]): boolean {
+  if (container.childNodes.length !== nodes.length) {
+    return false;
+  }
+  for (let index = 0; index < nodes.length; index += 1) {
+    if (container.childNodes[index] !== nodes[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 customElements.define('calc-calculator', CalculatorView);

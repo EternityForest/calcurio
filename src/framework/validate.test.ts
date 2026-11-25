@@ -3,6 +3,7 @@ import { CalculatorDefinitionError } from './errors.js';
 import type { CalculatorDefinition } from './types.js';
 import { isTableSelectVariable } from './types.js';
 import type { UnitSymbol } from './units.js';
+import { unchanged } from './unchanged.js';
 import { isValidIdentifier, validateCalculatorDefinition } from './validate.js';
 
 function baseDefinition(): CalculatorDefinition {
@@ -212,5 +213,84 @@ describe('validateCalculatorDefinition', () => {
         testCases: [{ a: null, b: 1 }],
       }),
     ).not.toThrow();
+  });
+
+  it('accepts computeState when every computable returns unchanged', () => {
+    expect(() =>
+      validateCalculatorDefinition({
+        id: 'compute-state-ok',
+        title: 'Compute state',
+        variables: [
+          { name: 'a', label: 'A', unit: 'V' },
+          { name: 'b', label: 'B', unit: 'V', computable: () => unchanged() },
+        ],
+        computeState: (state) => ({ ...state }),
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects computeState when a computable computes a value', () => {
+    expect(() =>
+      validateCalculatorDefinition({
+        id: 'compute-state-bad',
+        title: 'Compute state',
+        variables: [
+          { name: 'a', label: 'A', unit: 'V' },
+          { name: 'b', label: 'B', unit: 'V', computable: () => 1 },
+        ],
+        computeState: (state) => ({ ...state }),
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a non-function computeState', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        computeState: 'nope' as unknown as NonNullable<
+          CalculatorDefinition['computeState']
+        >,
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('accepts a default on a plain input variable', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          definition.variables[0]!,
+          { ...definition.variables[1]!, default: 5 },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects a default on a computable variable', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          { ...definition.variables[0]!, default: 5 },
+          definition.variables[1]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a non-finite default', () => {
+    const definition = baseDefinition();
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          definition.variables[0]!,
+          { ...definition.variables[1]!, default: Number.NaN },
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
   });
 });

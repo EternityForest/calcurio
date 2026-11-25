@@ -1,4 +1,6 @@
 import type { MissingValue } from './missing.js';
+import type { ComputeStateContext } from './output.js';
+import type { UnchangedValue } from './unchanged.js';
 import type { UnitSymbol } from './units.js';
 
 /** A calculator value in its variable's declared (base) unit. */
@@ -43,14 +45,23 @@ export interface NumberVariableDefinition extends VariableBase {
   readonly unitOptions?: readonly UnitSymbol[];
   /**
    * Computes the value from the state, or returns `missing([...])` when the
-   * inputs it needs are not available. Omit this on variables derived from a
-   * table column via `tableSelect`/`tableField`.
+   * inputs it needs are not available. Returns `unchanged()` to leave the
+   * current value alone, which a `computeState` calculator requires. Omit
+   * this on variables derived from a table column via
+   * `tableSelect`/`tableField`.
    */
-  readonly computable?: (state: Readonly<CalcState>) => number | MissingValue;
+  readonly computable?: (
+    state: Readonly<CalcState>,
+  ) => number | MissingValue | UnchangedValue;
   /** Name of a table-select variable whose selected row supplies this value. */
   readonly tableSelect?: string;
   /** Column in that table. Requires `tableSelect`. */
   readonly tableField?: string;
+  /**
+   * Value the variable starts at when no value has been stored yet. Ignored
+   * for variables that can be computed from the state.
+   */
+  readonly default?: number;
 }
 
 /**
@@ -127,6 +138,18 @@ export interface CalculatorDefinition {
   /** Complete states used to verify that every computable variable can be
    * solved for. Values are expressed in each variable's base unit. */
   readonly testCases?: readonly Readonly<CalcState>[];
+  /**
+   * Computes every computable variable at once from a copy of the state.
+   * When set, this replaces the incremental solver: the runtime never
+   * recomputes values on change, and every `computable` variable must return
+   * `unchanged()` so the editor knows the real value is produced here. The
+   * returned state is merged over the given copy, and `context.display(...)`
+   * may render arbitrary content for this run.
+   */
+  readonly computeState?: (
+    state: Readonly<CalcState>,
+    context: ComputeStateContext,
+  ) => Promise<CalcState> | CalcState;
 }
 
 /** Shape of a lazily imported category module. */

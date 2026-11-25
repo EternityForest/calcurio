@@ -1,10 +1,12 @@
-import { CalculatorDefinitionError } from './errors.js';
+import { CalculatorDefinitionError, errorMessage } from './errors.js';
 import type {
+  CalcState,
   CalculatorDefinition,
   TableSelectVariableDefinition,
   VariableDefinition,
 } from './types.js';
 import { isTableFieldVariable, isTableSelectVariable } from './types.js';
+import { isUnchanged } from './unchanged.js';
 import { measureOf, tryDescribeUnit } from './units.js';
 import type { UnitSymbol } from './units.js';
 
@@ -98,6 +100,14 @@ export function validateCalculatorDefinition(
     );
   }
 
+  if (definition.computeState !== undefined) {
+    if (typeof definition.computeState !== 'function') {
+      problems.push('computeState must be a function.');
+    } else {
+      validateComputeState(definition, problems);
+    }
+  }
+
   for (const [index, state] of (definition.testCases ?? []).entries()) {
     const where = `test case ${index + 1}`;
     for (const key of Object.keys(state)) {
@@ -134,6 +144,42 @@ export function validateCalculatorDefinition(
     throw new CalculatorDefinitionError(
       `Invalid calculator "${definition.id}":\n- ${problems.join('\n- ')}`,
     );
+  }
+}
+
+/**
+ * When `computeState` is set the runtime never solves individual variables, so
+ * every `computable` must defer to it by returning the unchanged sentinel.
+ */
+function validateComputeState(
+  definition: CalculatorDefinition,
+  problems: string[],
+): void {
+  const blank: CalcState = {};
+  for (const variable of definition.variables) {
+    blank[variable.name] = null;
+  }
+  const frozen = Object.freeze(blank);
+  for (const variable of definition.variables) {
+    if (isTableSelectVariable(variable) || variable.computable === undefined) {
+      continue;
+    }
+    let result: unknown;
+    try {
+      result = variable.computable(frozen);
+    } catch (error) {
+      problems.push(
+        `variable "${variable.name}": computeState is set but its computable ` +
+          `threw ${errorMessage(error)}.`,
+      );
+      continue;
+    }
+    if (!isUnchanged(result)) {
+      problems.push(
+        `variable "${variable.name}": when computeState is set every ` +
+          'computable must return unchanged().',
+      );
+    }
   }
 }
 
@@ -196,6 +242,19 @@ function validateNumberVariable(
       `${where}: a table-derived variable must not also have a computable ` +
         'function.',
     );
+  }
+
+  if (variable.default !== undefined) {
+    if (
+      typeof variable.default !== 'number' ||
+      !Number.isFinite(variable.default)
+    ) {
+      problems.push(`${where}: default must be a finite number.`);
+    } else if (hasSelect || variable.computable !== undefined) {
+      problems.push(
+        `${where}: only a plain input variable may declare a default.`,
+      );
+    }
   }
 }
 

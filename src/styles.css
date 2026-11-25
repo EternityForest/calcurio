@@ -214,6 +214,16 @@ calc-app {
   margin: 0;
 }
 
+.calc-output {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.calc-output-text {
+  margin: 0;
+}
+
 .calc-dialog {
   background: var(--box-bg);
   border: var(--border);
@@ -305,13 +315,15 @@ calc-app {
   gap: 0.5rem;
 }
 
-.calc-graph-canvas {
+.calc-graph-canvas,
+.calc-output-canvas {
   height: clamp(14rem, 45vh, 30rem);
   position: relative;
   width: 100%;
 }
 
-.calc-graph-canvas canvas {
+.calc-graph-canvas canvas,
+.calc-output-canvas canvas {
   display: block;
 }
 

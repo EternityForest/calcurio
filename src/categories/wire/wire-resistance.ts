@@ -24,9 +24,7 @@ interface WireInputs {
 
 /** Reads the three values the resistance formulas need, or reports what is
  * still missing. */
-function readWireInputs(
-  state: Readonly<CalcState>,
-): WireInputs | MissingValue {
+function readWireInputs(state: Readonly<CalcState>): WireInputs | MissingValue {
   const resistivity = valueOf(state, 'resistivity');
   const length = valueOf(state, 'length');
   const area = valueOf(state, 'area');
@@ -108,6 +106,10 @@ export const wireResistance: CalculatorDefinition = {
       tableSelect: 'gauge',
       tableField: 'area',
       description: 'Conductor cross-sectional area.',
+      equivalent: {
+        diameter: (area) => 2 * Math.sqrt(area / Math.PI),
+        radius: (area) => Math.sqrt(area / Math.PI),
+      },
     },
     {
       name: 'diameter',
@@ -116,6 +118,10 @@ export const wireResistance: CalculatorDefinition = {
       tableSelect: 'gauge',
       tableField: 'diameter',
       description: 'Conductor diameter.',
+      equivalent: {
+        area: (diameter) => Math.PI * (diameter / 2) ** 2,
+        radius: (diameter) => diameter / 2,
+      },
     },
     {
       name: 'radius',
@@ -124,6 +130,10 @@ export const wireResistance: CalculatorDefinition = {
       tableSelect: 'gauge',
       tableField: 'radius',
       description: 'Conductor radius.',
+      equivalent: {
+        area: (radius) => Math.PI * radius ** 2,
+        diameter: (radius) => 2 * radius,
+      },
     },
     {
       name: 'metal',

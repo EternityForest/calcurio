@@ -65,6 +65,15 @@ export interface NumberVariableDefinition extends VariableBase {
   /** Column in that table. Requires `tableSelect`. */
   readonly tableField?: string;
   /**
+   * Other numeric variables that hold the same quantity in a different form,
+   * each mapped to a function that converts this variable's value into that
+   * one. Declared in both directions (`area` names `diameter` and `diameter`
+   * names `area`), the entries form a group the runtime can use to fill in
+   * whichever members a table lookup leaves blank. Only consulted when no
+   * unambiguous table row matches.
+   */
+  readonly equivalent?: Readonly<Record<string, (value: number) => number>>;
+  /**
    * Value the variable starts at when no value has been stored yet. Ignored
    * for variables that can be computed from the state.
    */

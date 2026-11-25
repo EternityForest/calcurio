@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CalculatorDefinitionError } from './errors.js';
-import type { CalculatorDefinition,NumberVariableDefinition } from './types.js';
+import type {
+  CalculatorDefinition,
+  NumberVariableDefinition,
+} from './types.js';
 import { isTableSelectVariable } from './types.js';
 import type { UnitSymbol } from './units.js';
 import { unchanged } from './unchanged.js';
@@ -308,7 +311,10 @@ describe('validateCalculatorDefinition', () => {
         ...definition,
         variables: [
           definition.variables[0]!,
-          { ...definition.variables[1]!, default: 5 } as NumberVariableDefinition,
+          {
+            ...definition.variables[1]!,
+            default: 5,
+          } as NumberVariableDefinition,
         ],
       }),
     ).not.toThrow();
@@ -320,7 +326,10 @@ describe('validateCalculatorDefinition', () => {
       validateCalculatorDefinition({
         ...definition,
         variables: [
-          { ...definition.variables[0]!, default: 5 } as NumberVariableDefinition,
+          {
+            ...definition.variables[0]!,
+            default: 5,
+          } as NumberVariableDefinition,
           definition.variables[1]!,
         ],
       }),
@@ -334,7 +343,157 @@ describe('validateCalculatorDefinition', () => {
         ...definition,
         variables: [
           definition.variables[0]!,
-          { ...definition.variables[1]!, default: Number.NaN } as NumberVariableDefinition,
+          {
+            ...definition.variables[1]!,
+            default: Number.NaN,
+          } as NumberVariableDefinition,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+});
+
+describe('validateCalculatorDefinition equivalent', () => {
+  function equivalentDefinition(): CalculatorDefinition {
+    return {
+      id: 'equivalent',
+      title: 'Equivalent',
+      variables: [
+        {
+          name: 'area',
+          label: 'Area',
+          unit: 'mm2',
+          equivalent: {
+            diameter: (area) => 2 * Math.sqrt(area / Math.PI),
+          },
+        },
+        {
+          name: 'diameter',
+          label: 'Diameter',
+          unit: 'mm',
+          equivalent: {
+            area: (diameter) => Math.PI * (diameter / 2) ** 2,
+          },
+        },
+        { name: 'total', label: 'Total', unit: 'mm', computable: () => 1 },
+      ],
+    };
+  }
+
+  it('accepts a symmetric equivalent pair', () => {
+    expect(() =>
+      validateCalculatorDefinition(equivalentDefinition()),
+    ).not.toThrow();
+  });
+
+  it('rejects an entry that names an unknown variable', () => {
+    const definition = equivalentDefinition();
+    const area = definition.variables[0] as NumberVariableDefinition;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          { ...area, equivalent: { nope: (value) => value } },
+          definition.variables[1]!,
+          definition.variables[2]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects an entry that names the variable itself', () => {
+    const definition = equivalentDefinition();
+    const area = definition.variables[0] as NumberVariableDefinition;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          { ...area, equivalent: { area: (value) => value } },
+          definition.variables[1]!,
+          definition.variables[2]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects an entry whose conversion is not a function', () => {
+    const definition = equivalentDefinition();
+    const area = definition.variables[0] as NumberVariableDefinition;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          {
+            ...area,
+            equivalent: { diameter: 5 } as unknown as Readonly<
+              Record<string, (value: number) => number>
+            >,
+          },
+          definition.variables[1]!,
+          definition.variables[2]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a non-object equivalent map', () => {
+    const definition = equivalentDefinition();
+    const area = definition.variables[0] as NumberVariableDefinition;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          {
+            ...area,
+            equivalent: 'nope' as unknown as Readonly<
+              Record<string, (value: number) => number>
+            >,
+          },
+          definition.variables[1]!,
+          definition.variables[2]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a table-select target', () => {
+    const definition = equivalentDefinition();
+    const area = definition.variables[0] as NumberVariableDefinition;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          { ...area, equivalent: { shape: (value) => value } },
+          { name: 'shape', label: 'Shape', table: 'wire-gauge' },
+          definition.variables[2]!,
+        ],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a pair that is only declared one way', () => {
+    const definition = equivalentDefinition();
+    const area = definition.variables[0] as NumberVariableDefinition;
+    const diameter = definition.variables[1] as NumberVariableDefinition;
+    const { equivalent: _ignored, ...withoutEquivalent } = diameter;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [area, withoutEquivalent, definition.variables[2]!],
+      }),
+    ).toThrow(CalculatorDefinitionError);
+  });
+
+  it('rejects a computable variable that also declares equivalence', () => {
+    const definition = equivalentDefinition();
+    const total = definition.variables[2] as NumberVariableDefinition;
+    expect(() =>
+      validateCalculatorDefinition({
+        ...definition,
+        variables: [
+          definition.variables[0]!,
+          definition.variables[1]!,
+          { ...total, equivalent: { area: (value) => value } },
         ],
       }),
     ).toThrow(CalculatorDefinitionError);

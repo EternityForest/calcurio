@@ -118,15 +118,54 @@ variables were needed, which the UI shows as a hint.
 
 ### Compute order and refinement
 
-The runtime keeps an ordered list of every computable variable. It computes
-them in that order. When a value changes and the variable is an input
-(`input !== false`), another pass begins from the top, still excluding the
-value the user just changed. If the values have not settled after five
-rounds, the UI shows an error.
+A recompute runs in three phases. First every table select and its columns are
+refreshed from the values already present: a select only moves when exactly one
+row matches its populated columns, so a partial or ambiguous set leaves it
+alone. Then equivalent variables fill one another (see below). Only then are
+the `computable` variables solved, in definition order. When one of them
+changes and it is an input (`input !== false`), another pass begins from the
+top, still excluding the value the user just changed. If the values have not
+settled after five rounds, the UI shows an error. The table lookup and
+equivalent phases are settled once and never take part in those rounds.
 
 Changing a value pins it and recomputes the rest. Pressing **Calculate** on a
 variable moves it to the front, pins every other populated value, and solves
 for the target. This lets the same definition solve for any variable.
+
+### Equivalent variables
+
+Some table-bound values describe the same quantity in several forms. The wire
+resistance calculator stores cross-section, diameter, and radius as columns of
+the wire-gauge table, but a value typed into any one of them should fill the
+others even when no gauge row matches. An `equivalent` map records that: each
+key names another variable and each value converts this variable's value into
+it.
+
+```ts
+{
+  name: 'diameter',
+  label: 'Diameter',
+  unit: 'mm',
+  tableSelect: 'gauge',
+  tableField: 'diameter',
+  equivalent: {
+    area: (diameter) => Math.PI * (diameter / 2) ** 2,
+    radius: (diameter) => diameter / 2,
+  },
+},
+```
+
+Declare every link in both directions (`diameter` names `area` and `area` names
+`diameter`); the runtime treats the entries as one group of variables that are
+different spellings of the same value. When a table lookup leaves a group with
+exactly one populated member, the runtime converts it into every other member
+that is not pinned. Two or more populated members make the group ambiguous and
+it is left untouched. Because the conversions are a one-shot reflection rather
+than a formula solved from the state, they are applied before the refinement
+rounds and never drive them.
+
+A `computable` variable already derives its value from a formula, so it must
+not also declare `equivalent` variables.
 
 ### State-level calculators
 

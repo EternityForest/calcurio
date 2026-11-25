@@ -2,6 +2,7 @@ import { CalculatorDefinitionError, errorMessage } from './errors.js';
 import type {
   CalcState,
   CalculatorDefinition,
+  NumberVariableDefinition,
   TableSelectVariableDefinition,
   VariableDefinition,
 } from './types.js';
@@ -88,6 +89,17 @@ export function validateCalculatorDefinition(
       validateTableFieldReference(
         `variable ${index + 1} ("${variable.name}")`,
         variable.tableSelect,
+        variablesByName,
+        problems,
+      );
+    }
+  }
+
+  for (const [index, variable] of definition.variables.entries()) {
+    if (!isTableSelectVariable(variable)) {
+      validateEquivalent(
+        `variable ${index + 1} ("${variable.name}")`,
+        variable,
         variablesByName,
         problems,
       );
@@ -299,6 +311,72 @@ function validateTableFieldReference(
     problems.push(
       `${where}: tableSelect "${selectName}" is not a table-select variable.`,
     );
+  }
+}
+
+/**
+ * Checks the map of equivalent variables. Each entry names another numeric
+ * variable and the function that turns this variable's value into it. The
+ * pair must be declared in both directions so the relationship is a clean
+ * equivalence, and a computable variable, whose value already comes from a
+ * formula, must not also declare one.
+ */
+function validateEquivalent(
+  where: string,
+  variable: NumberVariableDefinition,
+  variablesByName: ReadonlyMap<string, VariableDefinition>,
+  problems: string[],
+): void {
+  const equivalent = variable.equivalent;
+  if (equivalent === undefined) {
+    return;
+  }
+  if (
+    typeof equivalent !== 'object' ||
+    equivalent === null ||
+    Array.isArray(equivalent)
+  ) {
+    problems.push(`${where}: equivalent must be an object of variables.`);
+    return;
+  }
+  if (variable.computable !== undefined) {
+    problems.push(
+      `${where}: a computable variable must not declare equivalent ` +
+        'variables.',
+    );
+  }
+
+  for (const [targetName, convert] of Object.entries(equivalent)) {
+    if (targetName === variable.name) {
+      problems.push(`${where}: equivalent must not name the variable itself.`);
+      continue;
+    }
+    const target = variablesByName.get(targetName);
+    if (target === undefined) {
+      problems.push(
+        `${where}: equivalent names unknown variable "${targetName}".`,
+      );
+      continue;
+    }
+    if (isTableSelectVariable(target)) {
+      problems.push(
+        `${where}: equivalent target "${targetName}" must be a numeric ` +
+          'variable.',
+      );
+      continue;
+    }
+    if (typeof convert !== 'function') {
+      problems.push(
+        `${where}: equivalent["${targetName}"] must be a function.`,
+      );
+      continue;
+    }
+    if (typeof target.equivalent?.[variable.name] !== 'function') {
+      problems.push(
+        `${where}: equivalent target "${targetName}" must declare the ` +
+          `reverse conversion back to "${variable.name}".`,
+      );
+    }
   }
 }
 

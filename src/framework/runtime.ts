@@ -159,6 +159,7 @@ export class CalculatorRuntime {
   private readonly tableSelects = new Map<string, TableSelectBinding>();
   private readonly tableFields = new Map<string, TableFieldBinding>();
   private readonly tableFieldsBySelect = new Map<string, TableFieldBinding[]>();
+  private readonly equivalentGroups: readonly (readonly string[])[];
 
   private values: CalcState = {};
   private pinnedNames = new Set<string>();
@@ -187,6 +188,7 @@ export class CalculatorRuntime {
     this.bindTables(tables);
     this.applyTableDefaults();
 
+    this.equivalentGroups = buildEquivalentGroups(definition.variables);
     this.derivedNames = definition.variables
       .filter((variable) => this.isDerived(variable))
       .map((variable) => variable.name);
@@ -543,19 +545,26 @@ export class CalculatorRuntime {
   }
 
   /**
-   * Recomputes every unpinned variable in order. When a value changes and the
-   * variable is an input, another pass starts. More than
-   * `MAX_REFINEMENT_ROUNDS` passes raises a visible error.
+   * Recomputes the state in three phases. First every table select and table
+   * column is refreshed from the values already present, then equivalent
+   * variables fill one another from a single known member, and finally the
+   * computable variables are solved. Within the last phase a change to an
+   * input starts another pass; more than `MAX_REFINEMENT_ROUNDS` passes raises
+   * a visible error. Table lookups and equivalents are settled once and never
+   * take part in the refinement rounds.
    */
   recompute(): void {
     this.errorMessages = [];
     this.missingNeeds.clear();
 
+    this.applyTableLookups();
+    this.applyEquivalents();
+
     let settled = false;
     for (let round = 0; round < MAX_REFINEMENT_ROUNDS; round += 1) {
       let restart = false;
       for (const name of this.order) {
-        if (this.pinnedNames.has(name)) {
+        if (this.pinnedNames.has(name) || !this.isRecalcVariable(name)) {
           continue;
         }
         if (this.computeVariable(name)) {
@@ -859,6 +868,112 @@ export class CalculatorRuntime {
       return this.computeTableField(name, field);
     }
     return this.computeNumber(name, variable);
+  }
+
+  /** True for a table select or a variable that reads one of its columns. */
+  private isTableDerived(name: string): boolean {
+    return (
+      isTableSelectVariable(this.requireVariable(name)) ||
+      this.tableFields.has(name)
+    );
+  }
+
+  /** True for a variable solved from the state by a `computable` function. */
+  private isRecalcVariable(name: string): boolean {
+    const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      return false;
+    }
+    return (
+      this.tableFields.get(name) === undefined &&
+      variable.computable !== undefined
+    );
+  }
+
+  /**
+   * Settles the table selects and their columns before anything else. A select
+   * only moves when exactly one row matches its populated columns, so a partial
+   * or ambiguous set leaves it alone. Runs to a fixed point because a select
+   * derives from its columns and the columns derive back from the select.
+   */
+  private applyTableLookups(): void {
+    for (let round = 0; round < MAX_REFINEMENT_ROUNDS; round += 1) {
+      let restart = false;
+      for (const name of this.order) {
+        if (this.pinnedNames.has(name) || !this.isTableDerived(name)) {
+          continue;
+        }
+        if (this.computeVariable(name)) {
+          restart = true;
+        }
+      }
+      if (!restart) {
+        break;
+      }
+    }
+  }
+
+  /**
+   * Fills variables that describe the same quantity as one another from
+   * whichever single member of their equivalent group already holds a value.
+   * Two or more known members make the group ambiguous, so it is left alone.
+   * A one-shot conversion, these values never drive a refinement round.
+   */
+  private applyEquivalents(): void {
+    for (const group of this.equivalentGroups) {
+      let source: NumberVariableDefinition | undefined;
+      let knownCount = 0;
+      for (const name of group) {
+        const value = this.values[name];
+        const variable = this.variablesByName.get(name);
+        if (
+          typeof value === 'number' &&
+          Number.isFinite(value) &&
+          variable !== undefined &&
+          !isTableSelectVariable(variable)
+        ) {
+          knownCount += 1;
+          source = variable;
+        }
+      }
+      if (knownCount !== 1 || source === undefined) {
+        continue;
+      }
+      const value = this.values[source.name];
+      if (typeof value !== 'number' || !Number.isFinite(value)) {
+        continue;
+      }
+      for (const [targetName, convert] of Object.entries(
+        source.equivalent ?? {},
+      )) {
+        if (targetName === source.name || this.pinnedNames.has(targetName)) {
+          continue;
+        }
+        const target = this.variablesByName.get(targetName);
+        if (target === undefined) {
+          continue;
+        }
+        let next: number;
+        try {
+          next = convert(value);
+        } catch (error) {
+          this.addError(
+            `${source.label} could not convert to ${target.label}: ` +
+              `${errorMessage(error)}`,
+          );
+          continue;
+        }
+        if (!Number.isFinite(next)) {
+          continue;
+        }
+        const current = this.values[targetName] ?? null;
+        if (typeof current === 'number' && nearlyEqual(current, next)) {
+          continue;
+        }
+        this.values[targetName] = next;
+        this.missingNeeds.delete(targetName);
+      }
+    }
   }
 
   private computeNumber(
@@ -1351,4 +1466,55 @@ function joinWithAnd(items: readonly string[]): string {
     return `${items[0]} and ${items[1]}`;
   }
   return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+}
+
+/**
+ * Collects the numeric variables joined by their `equivalent` links into
+ * connected components. Every component names one quantity expressed several
+ * ways (area, diameter, and radius), so the runtime can fill the group from
+ * whichever single member already holds a value.
+ */
+function buildEquivalentGroups(
+  variables: readonly VariableDefinition[],
+): readonly (readonly string[])[] {
+  const neighbours = new Map<string, Set<string>>();
+  const link = (from: string, to: string): void => {
+    const links = neighbours.get(from) ?? new Set<string>();
+    links.add(to);
+    neighbours.set(from, links);
+  };
+  for (const variable of variables) {
+    if (isTableSelectVariable(variable)) {
+      continue;
+    }
+    for (const target of Object.keys(variable.equivalent ?? {})) {
+      link(variable.name, target);
+    }
+  }
+
+  const groups: string[][] = [];
+  const seen = new Set<string>();
+  for (const name of neighbours.keys()) {
+    if (seen.has(name)) {
+      continue;
+    }
+    const group: string[] = [];
+    const stack = [name];
+    seen.add(name);
+    while (stack.length > 0) {
+      const current = stack.pop();
+      if (current === undefined) {
+        continue;
+      }
+      group.push(current);
+      for (const next of neighbours.get(current) ?? []) {
+        if (!seen.has(next)) {
+          seen.add(next);
+          stack.push(next);
+        }
+      }
+    }
+    groups.push(group);
+  }
+  return groups;
 }

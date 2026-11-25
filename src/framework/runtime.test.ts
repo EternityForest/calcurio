@@ -887,3 +887,110 @@ function fieldSelectDefinition(): CalculatorDefinition {
     ],
   };
 }
+
+/**
+ * A table whose area and diameter columns describe the same circle, used to
+ * exercise equivalent variables.
+ */
+const shapesTable: TableDefinition = {
+  id: 'shapes',
+  title: 'Shapes',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    { key: 'area', label: 'Area', unit: 'mm2' },
+    { key: 'diameter', label: 'Diameter', unit: 'mm' },
+  ],
+  rows: [
+    { id: 'small', label: 'Small', area: Math.PI / 4, diameter: 1 },
+    { id: 'large', label: 'Large', area: Math.PI, diameter: 2 },
+  ],
+};
+
+/**
+ * A definition with an area/diameter equivalent group and a downstream
+ * perimeter computed from the diameter.
+ */
+function equivalentDefinition(): CalculatorDefinition {
+  return {
+    id: 'equivalent',
+    title: 'Equivalent',
+    variables: [
+      { name: 'shape', label: 'Shape', table: 'shapes' },
+      {
+        name: 'area',
+        label: 'Area',
+        unit: 'mm2',
+        tableSelect: 'shape',
+        tableField: 'area',
+        equivalent: {
+          diameter: (area) => 2 * Math.sqrt(area / Math.PI),
+        },
+      },
+      {
+        name: 'diameter',
+        label: 'Diameter',
+        unit: 'mm',
+        tableSelect: 'shape',
+        tableField: 'diameter',
+        equivalent: {
+          area: (diameter) => Math.PI * (diameter / 2) ** 2,
+        },
+      },
+      {
+        name: 'perimeter',
+        label: 'Perimeter',
+        unit: 'mm',
+        computable: (state) => {
+          const diameter = state['diameter'];
+          return typeof diameter === 'number' && Number.isFinite(diameter)
+            ? Math.PI * diameter
+            : missing(['diameter']);
+        },
+      },
+    ],
+  };
+}
+
+describe('CalculatorRuntime equivalent variables', () => {
+  function runtime(): CalculatorRuntime {
+    return new CalculatorRuntime(
+      equivalentDefinition(),
+      new TableRegistry([shapesTable]),
+    );
+  }
+
+  it('fills an equivalent group from a value that matches no table row', () => {
+    const calc = runtime();
+    calc.setDisplayText('diameter', '3');
+    expect(calc.state['shape']).toBeNull();
+    expect(calc.state['area']).toBeCloseTo(Math.PI * (3 / 2) ** 2, 9);
+    expect(calc.errors).toEqual([]);
+  });
+
+  it('recomputes downstream values after filling a group', () => {
+    const calc = runtime();
+    calc.setDisplayText('area', '4');
+    expect(calc.state['diameter']).toBeCloseTo(2 * Math.sqrt(4 / Math.PI), 9);
+    expect(calc.state['perimeter']).toBeCloseTo(
+      Math.PI * 2 * Math.sqrt(4 / Math.PI),
+      9,
+    );
+  });
+
+  it('prefers a table row when the typed value matches one', () => {
+    const calc = runtime();
+    calc.setDisplayText('diameter', '2');
+    expect(calc.state['shape']).toBe('large');
+    expect(calc.state['area']).toBeCloseTo(Math.PI, 9);
+  });
+
+  it('leaves an equivalent group alone when two members hold values', () => {
+    const calc = runtime();
+    calc.loadState({ shape: null, area: 1, diameter: 5, perimeter: null });
+    expect(calc.state['area']).toBe(1);
+    expect(calc.state['diameter']).toBe(5);
+  });
+});

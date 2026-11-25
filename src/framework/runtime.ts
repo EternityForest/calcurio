@@ -80,6 +80,8 @@ export class CalculatorRuntime {
   private values: CalcState = {};
   private pinnedNames = new Set<string>();
   private order: string[] = [];
+  private lastTouchedName: string | null = null;
+  private converged = true;
   private errorMessages: string[] = [];
   private issues: ValidationIssue[] = [];
 
@@ -115,6 +117,11 @@ export class CalculatorRuntime {
 
   get errors(): readonly string[] {
     return [...this.errorMessages];
+  }
+
+  /** False when the last recompute could not reach a settled state. */
+  get isConverged(): boolean {
+    return this.converged;
   }
 
   get validationIssues(): readonly ValidationIssue[] {
@@ -245,6 +252,7 @@ export class CalculatorRuntime {
     }
 
     this.order = [name, ...this.order.filter((entry) => entry !== name)];
+    this.lastTouchedName = name;
     const pinned = new Set<string>();
     for (const [otherName, value] of Object.entries(this.values)) {
       if (otherName !== name && value !== null) {
@@ -281,6 +289,7 @@ export class CalculatorRuntime {
       }
     }
 
+    this.converged = settled;
     if (!settled) {
       this.addError(
         `Calculation did not settle after ${MAX_REFINEMENT_ROUNDS} rounds. ` +
@@ -289,6 +298,7 @@ export class CalculatorRuntime {
     }
 
     this.runValidators();
+    this.reportConflictingValues();
     this.emit();
   }
 
@@ -300,6 +310,7 @@ export class CalculatorRuntime {
     }
     this.pinnedNames = new Set();
     this.order = [...this.computableNames];
+    this.lastTouchedName = null;
     this.recompute();
   }
 
@@ -345,6 +356,7 @@ export class CalculatorRuntime {
         .map(([name]) => name),
     );
     this.order = [...this.computableNames];
+    this.lastTouchedName = null;
     this.recompute();
   }
 
@@ -402,7 +414,122 @@ export class CalculatorRuntime {
     this.values[name] = value;
     this.pinnedNames.add(name);
     this.missingNeeds.delete(name);
+    this.lastTouchedName = name;
+    if (value !== null) {
+      this.resolvePinnedDeadlock();
+    }
     this.recompute();
+  }
+
+  /**
+   * If every computable value is pinned, a change would leave the state
+   * untouched. Unpin one value so the runtime recomputes it from the user's
+   * inputs instead of displaying contradictory values.
+   *
+   * The candidate is the first variable in compute order that can actually be
+   * computed from the current values. Falling back to a variable with missing
+   * dependencies would clear it and leave the state incomplete, which looks
+   * like a valid calculation but is not. If nothing is computable, the most
+   * recently used variable is used instead.
+   *
+   * When the touched variable is the only computable one there is nothing to
+   * solve, so the typed value is kept as is instead of being recomputed from
+   * sources that may not exist.
+   */
+  private resolvePinnedDeadlock(): void {
+    const allPinned = this.computableNames.every((name) =>
+      this.pinnedNames.has(name),
+    );
+    if (!allPinned) {
+      return;
+    }
+    const candidates = this.order.filter(
+      (name) => name !== this.lastTouchedName,
+    );
+    if (candidates.length === 0) {
+      return;
+    }
+    const candidate =
+      candidates.find((name) => this.canCompute(name)) ?? candidates[0];
+    if (candidate !== undefined) {
+      this.pinnedNames.delete(candidate);
+    }
+  }
+
+  /**
+   * True when the variable's computable function produces a finite value from
+   * the current state. Used to avoid unpinning a variable that would only
+   * report missing dependencies.
+   */
+  private canCompute(name: string): boolean {
+    const variable = this.requireVariable(name);
+    const computable = variable.computable;
+    if (computable === undefined) {
+      return false;
+    }
+    try {
+      const result = computable(Object.freeze({ ...this.values }));
+      return !isMissing(result) && Number.isFinite(result);
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Every computable value being pinned is only safe when the values agree.
+   * A contradictory set (a hand-edited bookmark, for example) leaves nothing
+   * to compute, so the stale numbers would look like a valid result. Report
+   * the conflict so the user must pick which value to trust.
+   */
+  private reportConflictingValues(): void {
+    if (this.computableNames.length < 2) {
+      return;
+    }
+    const allPinned = this.computableNames.every((name) =>
+      this.pinnedNames.has(name),
+    );
+    if (!allPinned) {
+      return;
+    }
+    const conflicting: string[] = [];
+    for (const name of this.computableNames) {
+      const variable = this.requireVariable(name);
+      const pinnedValue = this.values[name] ?? null;
+      if (pinnedValue === null || variable.computable === undefined) {
+        continue;
+      }
+      if (!this.agreesWithPinnedValue(name, pinnedValue)) {
+        conflicting.push(variable.label);
+      }
+    }
+    if (conflicting.length === 0) {
+      return;
+    }
+    this.addError(
+      `${joinWithAnd(conflicting)} cannot all hold at once. ` +
+        'Press Calculate on the value you trust to solve for the rest.',
+    );
+  }
+
+  /**
+   * Recomputes one pinned variable from every other value. A missing result
+   * means the variable cannot be checked, not that it is wrong.
+   */
+  private agreesWithPinnedValue(name: string, pinnedValue: number): boolean {
+    const computable = this.requireVariable(name).computable;
+    if (computable === undefined) {
+      return true;
+    }
+    let result: number | MissingValue;
+    try {
+      result = computable(Object.freeze({ ...this.values, [name]: null }));
+    } catch {
+      return true;
+    }
+    if (isMissing(result) || !Number.isFinite(result)) {
+      return true;
+    }
+    return nearlyEqual(pinnedValue, result);
   }
 
   private runValidators(): void {

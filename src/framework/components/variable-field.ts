@@ -3,7 +3,7 @@ import type { TemplateResult } from 'lit';
 import type { ValueUpdateResult } from '../runtime.js';
 import type { UnitSymbol } from '../units.js';
 
-const COMMIT_DELAY_MS = 250;
+const COMMIT_DELAY_MS = 100;
 
 let nextFieldId = 0;
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { ohmsLaw } from '../categories/basic/ohms-law.js';
 import { StateLoadError } from './errors.js';
 import { missing } from './missing.js';
 import {
@@ -38,6 +39,29 @@ function doublingDefinition(): MutableDefinition {
       },
     ],
     testCases: [{ a: 2, b: 1, c: null }],
+  };
+}
+
+function singleComputableDefinition(): CalculatorDefinition {
+  return {
+    id: 'single-computable',
+    title: 'Single computable',
+    variables: [
+      {
+        name: 'total',
+        label: 'Total',
+        unit: 'V',
+        computable: (state) =>
+          state['part'] === null
+            ? missing(['part'])
+            : (state['part'] as number) * 2,
+      },
+      {
+        name: 'part',
+        label: 'Part',
+        unit: 'V',
+      },
+    ],
   };
 }
 
@@ -338,5 +362,88 @@ describe('CalculatorRuntime', () => {
     expect(runtime.isComputable('c')).toBe(false);
     expect(runtime.isEditable('a')).toBe(true);
     expect(runtime.unitChoices('a')).toContain('V');
+  });
+
+  it('unpins a computable variable when every value is pinned', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.setDisplayText('voltage', '12000');
+    runtime.setDisplayText('current', '120');
+    expect(runtime.isPinned('resistance')).toBe(false);
+
+    runtime.setDisplayText('resistance', '200');
+    expect(runtime.isPinned('voltage')).toBe(false);
+    expect(runtime.isPinned('current')).toBe(true);
+    expect(runtime.isPinned('resistance')).toBe(true);
+    expect(runtime.state['voltage']).toBeCloseTo(24000, 9);
+  });
+
+  it('prefers a computable variable when breaking a deadlock', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.setDisplayText('voltage', '12000');
+    runtime.setDisplayText('current', '120');
+    runtime.setDisplayText('resistance', '');
+    expect(runtime.isPinned('voltage')).toBe(true);
+    expect(runtime.isPinned('current')).toBe(true);
+    expect(runtime.isPinned('resistance')).toBe(true);
+
+    runtime.setDisplayText('voltage', '13000');
+    expect(runtime.isPinned('resistance')).toBe(false);
+    expect(runtime.state['current']).toBeCloseTo(120, 9);
+    expect(runtime.state['resistance']).toBeCloseTo(108.33333333333333, 9);
+  });
+
+  it('falls back to the head of the compute order when nothing is computable', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.setDisplayText('voltage', '12000');
+    runtime.setDisplayText('current', '');
+    runtime.setDisplayText('resistance', '');
+    expect(runtime.isPinned('voltage')).toBe(true);
+    expect(runtime.isPinned('current')).toBe(true);
+    expect(runtime.isPinned('resistance')).toBe(true);
+
+    runtime.setDisplayText('voltage', '13000');
+    expect(runtime.isPinned('voltage')).toBe(true);
+    expect(runtime.isPinned('current')).toBe(false);
+    expect(runtime.isPinned('resistance')).toBe(true);
+    expect(runtime.state['current']).toBeNull();
+  });
+
+  it('keeps a typed value when it is the only computable variable', () => {
+    const runtime = new CalculatorRuntime(singleComputableDefinition());
+    runtime.setDisplayText('total', '8');
+    expect(runtime.state['total']).toBe(8);
+    expect(runtime.isPinned('total')).toBe(true);
+    expect(runtime.errors).toEqual([]);
+  });
+
+  it('reports a contradictory fully pinned state', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.loadState({ voltage: 12000, current: 120, resistance: 200 });
+    expect(runtime.state).toEqual({
+      voltage: 12000,
+      current: 120,
+      resistance: 200,
+    });
+    expect(runtime.errors).toHaveLength(1);
+    expect(runtime.errors[0]).toContain('cannot all hold at once');
+    expect(runtime.errors[0]).toContain('Voltage, Current, and Resistance');
+  });
+
+  it('accepts a consistent fully pinned state', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.loadState({ voltage: 12000, current: 120, resistance: 100 });
+    expect(runtime.errors).toEqual([]);
+  });
+
+  it('resolves a contradictory state when a value is calculated', () => {
+    const runtime = new CalculatorRuntime(ohmsLaw);
+    runtime.loadState({ voltage: 12000, current: 120, resistance: 200 });
+    expect(runtime.errors).toHaveLength(1);
+
+    runtime.calculate('resistance');
+    expect(runtime.errors).toEqual([]);
+    expect(runtime.state['resistance']).toBeCloseTo(100, 9);
+    expect(runtime.state['voltage']).toBe(12000);
+    expect(runtime.state['current']).toBe(120);
   });
 });

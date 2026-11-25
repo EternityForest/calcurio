@@ -68,10 +68,18 @@ describe('runCalculatorTests', () => {
     };
 
     const failures = runCalculatorTests(definition);
-    expect(failures).toHaveLength(2);
-    expect(failures.every((failure) => failure.variable === 'a')).toBe(true);
-    expect(failures[0]?.message).toContain('expected 2');
-    expect(failures[0]?.message).toContain('got 3');
+    expect(failures).toHaveLength(3);
+    const mismatches = failures.filter((failure) => failure.variable === 'a');
+    expect(mismatches).toHaveLength(2);
+    expect(mismatches[0]?.message).toContain('expected 2');
+    expect(mismatches[0]?.message).toContain('got 3');
+    expect(
+      failures.some(
+        (failure) =>
+          failure.variable === null &&
+          failure.message.includes('cannot all hold at once'),
+      ),
+    ).toBe(true);
   });
 
   it('reports validation issues', () => {

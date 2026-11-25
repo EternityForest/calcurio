@@ -2,9 +2,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VariableField } from './variable-field.js';
-import type { FieldModel } from './variable-field.js';
+import type { NumberFieldModel } from './variable-field.js';
 
-function fieldModel(overrides: Partial<FieldModel> = {}): FieldModel {
+function fieldModel(
+  overrides: Partial<NumberFieldModel> = {},
+): NumberFieldModel {
   return {
     name: 'voltage',
     label: 'Voltage',

@@ -7,6 +7,11 @@ export const CATEGORY_MANIFEST = {
     description: 'Everyday electrical calculations.',
     load: () => import('./categories/basic/index.js'),
   },
+  wire: {
+    title: 'Wire',
+    description: 'Wire sizes, conductor metals, and resistance.',
+    load: () => import('./categories/wire/index.js'),
+  },
 } as const satisfies CategoryManifest;
 
 export type App = CalculatorApp<typeof CATEGORY_MANIFEST>;

@@ -10,11 +10,17 @@ import type {
 /** Units added by Calcurio because the library has no resistance measure. */
 export type ResistanceUnit = 'Ω' | 'mΩ' | 'kΩ' | 'MΩ';
 
+/** Units added by Calcurio because the library has no resistivity measure. */
+export type ResistivityUnit = 'Ω·m' | 'Ω·mm²/m' | 'Ω·cm' | 'nΩ·m' | 'µΩ·cm';
+
 /** Every unit a calculator variable may use. */
-export type UnitSymbol = AllMeasuresUnits | ResistanceUnit;
+export type UnitSymbol =
+  | AllMeasuresUnits
+  | ResistanceUnit
+  | ResistivityUnit;
 
 /** Every measurement kind the unit registry understands. */
-export type MeasureName = AllMeasures | 'resistance';
+export type MeasureName = AllMeasures | 'resistance' | 'resistivity';
 
 type SystemName = AllMeasuresSystems;
 
@@ -41,9 +47,46 @@ const resistance: Measure<SystemName, ResistanceUnit> = {
   },
 };
 
+const resistivity: Measure<SystemName, ResistivityUnit> = {
+  systems: {
+    SI: {
+      'Ω·m': {
+        name: { singular: 'Ohm metre', plural: 'Ohm metres' },
+        to_anchor: 1,
+      },
+      'Ω·mm²/m': {
+        name: {
+          singular: 'Ohm square millimetre per metre',
+          plural: 'Ohm square millimetres per metre',
+        },
+        to_anchor: 1e-6,
+      },
+      'Ω·cm': {
+        name: {
+          singular: 'Ohm centimetre',
+          plural: 'Ohm centimetres',
+        },
+        to_anchor: 1e-2,
+      },
+      'nΩ·m': {
+        name: { singular: 'Nanoohm metre', plural: 'Nanoohm metres' },
+        to_anchor: 1e-9,
+      },
+      'µΩ·cm': {
+        name: {
+          singular: 'Microohm centimetre',
+          plural: 'Microohm centimetres',
+        },
+        to_anchor: 1e-8,
+      },
+    },
+  },
+};
+
 const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   ...allMeasures,
   resistance,
+  resistivity,
 };
 
 const convert = configureMeasurements(measures);

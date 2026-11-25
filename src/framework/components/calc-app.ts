@@ -1,11 +1,16 @@
 import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
 import { BookmarkStore, browserLocalStorage } from '../bookmarks.js';
-import type { CalculatorApp } from '../app.js';
+import type {
+  CalculatorApp,
+  CategoryHandle,
+  RegisteredCalculator,
+} from '../app.js';
 import { errorMessage } from '../errors.js';
 import { CalculatorRuntime } from '../runtime.js';
-import type { CalculatorDefinition, CategoryManifest } from '../types.js';
+import type { CategoryManifest } from '../types.js';
 import './calculator-view.js';
+import './table-view.js';
 
 type View =
   | { readonly kind: 'categories' }
@@ -14,6 +19,11 @@ type View =
       readonly kind: 'calculator';
       readonly categoryId: string;
       readonly calculatorId: string;
+    }
+  | {
+      readonly kind: 'table';
+      readonly categoryId: string;
+      readonly tableId: string;
     };
 
 /**
@@ -77,11 +87,12 @@ export class CalcApp extends LitElement {
     if (this.view.kind === 'categories') {
       return nothing;
     }
-    const label = this.view.kind === 'calculator' ? 'Back' : 'All categories';
+    const label =
+      this.view.kind === 'category' ? 'All categories' : 'Back';
     const target: View =
-      this.view.kind === 'calculator'
-        ? { kind: 'category', categoryId: this.view.categoryId }
-        : { kind: 'categories' };
+      this.view.kind === 'category'
+        ? { kind: 'categories' }
+        : { kind: 'category', categoryId: this.view.categoryId };
     return html`
       <button
         class="button"
@@ -107,6 +118,12 @@ export class CalcApp extends LitElement {
           app,
           this.view.categoryId,
           this.view.calculatorId,
+        );
+      case 'table':
+        return this.renderTable(
+          app,
+          this.view.categoryId,
+          this.view.tableId,
         );
     }
   }
@@ -170,12 +187,24 @@ export class CalcApp extends LitElement {
       `;
     }
 
-    if (handle.calculators.length === 0) {
-      return html` <p class="help">No calculators in this category yet.</p> `;
+    if (handle.calculators.length === 0 && handle.tables.length === 0) {
+      return html` <p class="help">Nothing in this category yet.</p> `;
     }
 
     return html`
       <p class="help">${handle.description}</p>
+      ${this.renderCalculatorTiles(handle)}
+      ${this.renderTableTiles(handle)}
+    `;
+  }
+
+  private renderCalculatorTiles(
+    handle: CategoryHandle,
+  ): TemplateResult | typeof nothing {
+    if (handle.calculators.length === 0) {
+      return nothing;
+    }
+    return html`
       <div class="calc-tiles">
         ${handle.calculators.map((registered) => {
           const description = registered.definition.description ?? '';
@@ -184,7 +213,11 @@ export class CalcApp extends LitElement {
               class="card calc-tile"
               type="button"
               data-testid="calculator-${registered.definition.id}"
-              @click=${() => this.openCalculator(categoryId, registered.definition.id)}
+              @click=${() =>
+                this.openCalculator(
+                  handle.id,
+                  registered.definition.id,
+                )}
             >
               <strong>${registered.definition.title}</strong>
               ${
@@ -199,6 +232,36 @@ export class CalcApp extends LitElement {
     `;
   }
 
+  private renderTableTiles(
+    handle: CategoryHandle,
+  ): TemplateResult | typeof nothing {
+    if (handle.tables.length === 0) {
+      return nothing;
+    }
+    return html`
+      <h3 class="calc-section-title">Reference tables</h3>
+      <div class="calc-tiles">
+        ${handle.tables.map(
+          (table) => html`
+            <button
+              class="card calc-tile"
+              type="button"
+              data-testid="table-${table.id}"
+              @click=${() => this.openTable(handle.id, table.id)}
+            >
+              <strong>${table.title}</strong>
+              ${
+                table.description === undefined
+                  ? nothing
+                  : html`<span class="help">${table.description}</span>`
+              }
+            </button>
+          `,
+        )}
+      </div>
+    `;
+  }
+
   private renderCalculator(
     app: CalculatorApp<CategoryManifest>,
     categoryId: string,
@@ -206,13 +269,23 @@ export class CalcApp extends LitElement {
   ): TemplateResult {
     const handle = app.categories[categoryId];
     const registered = handle?.get(calculatorId);
-    if (registered === undefined) {
+    if (handle === undefined || registered === undefined) {
       return html`
         <p class="alert danger">That calculator is not available.</p>
       `;
     }
 
-    const runtime = this.runtimeFor(registered.globalId, registered.definition);
+    let runtime: CalculatorRuntime;
+    try {
+      runtime = this.runtimeFor(handle, registered);
+    } catch (error) {
+      return html`
+        <p class="alert danger calc-errors" role="alert">
+          ${registered.definition.title} could not be loaded:
+          ${errorMessage(error)}
+        </p>
+      `;
+    }
 
     return html`
       <calc-calculator
@@ -223,16 +296,35 @@ export class CalcApp extends LitElement {
     `;
   }
 
+  private renderTable(
+    app: CalculatorApp<CategoryManifest>,
+    categoryId: string,
+    tableId: string,
+  ): TemplateResult {
+    const table = app.categories[categoryId]?.getTable(tableId);
+    if (table === undefined) {
+      return html`
+        <p class="alert danger">That table is not available.</p>
+      `;
+    }
+    return html` <calc-table-view .table=${table}></calc-table-view> `;
+  }
+
+  /**
+   * One runtime per calculator, shared across visits so values survive
+   * navigation. Construction problems become a visible error instead of
+   * breaking the widget.
+   */
   private runtimeFor(
-    globalId: string,
-    definition: CalculatorDefinition,
+    handle: CategoryHandle,
+    registered: RegisteredCalculator,
   ): CalculatorRuntime {
-    const existing = this.runtimes.get(globalId);
+    const existing = this.runtimes.get(registered.globalId);
     if (existing !== undefined) {
       return existing;
     }
-    const runtime = new CalculatorRuntime(definition);
-    this.runtimes.set(globalId, runtime);
+    const runtime = new CalculatorRuntime(registered.definition, handle);
+    this.runtimes.set(registered.globalId, runtime);
     return runtime;
   }
 
@@ -245,6 +337,11 @@ export class CalcApp extends LitElement {
 
   private openCalculator(categoryId: string, calculatorId: string): void {
     this.view = { kind: 'calculator', categoryId, calculatorId };
+    this.requestUpdate();
+  }
+
+  private openTable(categoryId: string, tableId: string): void {
+    this.view = { kind: 'table', categoryId, tableId };
     this.requestUpdate();
   }
 

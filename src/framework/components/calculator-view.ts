@@ -2,9 +2,11 @@ import { html, LitElement, nothing } from 'lit';
 import type { PropertyValues, TemplateResult } from 'lit';
 import { ref } from 'lit/directives/ref.js';
 import type { BookmarkStore } from '../bookmarks.js';
-import type { CalculatorRuntime } from '../runtime.js';
+import { errorMessage } from '../errors.js';
+import type { CalculatorRuntime, ValueUpdateResult } from '../runtime.js';
 import type { UnitSymbol } from '../units.js';
 import type { VariableDefinition } from '../types.js';
+import { isTableSelectVariable } from '../types.js';
 import { BookmarksDialog } from './bookmarks-dialog.js';
 import './variable-field.js';
 import type { FieldModel } from './variable-field.js';
@@ -117,18 +119,40 @@ export class CalculatorView extends LitElement {
     variable: VariableDefinition,
   ): TemplateResult {
     const name = variable.name;
-    const model: FieldModel = {
+    const base = {
       name,
       label: variable.label,
       description: variable.description ?? '',
-      value: runtime.formattedValue(name),
-      placeholder: runtime.missingLabel(name),
-      unit: runtime.displayUnitFor(name),
-      unitChoices: runtime.unitChoices(name),
       editable: runtime.isEditable(name),
       computable: runtime.isComputable(name),
       pinned: runtime.isPinned(name),
       issues: runtime.issuesFor(name).map((issue) => issue.message),
+    };
+
+    if (isTableSelectVariable(variable)) {
+      const model: FieldModel = {
+        ...base,
+        kind: 'tableSelect',
+        value: runtime.selectedKey(name) ?? '',
+        choices: runtime.tableChoices(name),
+      };
+      return html`
+        <calc-variable-field
+          .model=${model}
+          .onSelectionChange=${(key: string) =>
+            this.selectRow(runtime, name, key)}
+          .onCalculate=${() => runtime.calculate(name)}
+        ></calc-variable-field>
+      `;
+    }
+
+    const model: FieldModel = {
+      ...base,
+      kind: 'number',
+      value: runtime.formattedValue(name),
+      placeholder: runtime.missingLabel(name),
+      unit: runtime.displayUnitFor(name) ?? variable.unit,
+      unitChoices: runtime.unitChoices(name),
     };
 
     return html`
@@ -140,6 +164,20 @@ export class CalculatorView extends LitElement {
         .onCalculate=${() => runtime.calculate(name)}
       ></calc-variable-field>
     `;
+  }
+
+  /** Applies a row choice and reports the failure inline when rejected. */
+  private selectRow(
+    runtime: CalculatorRuntime,
+    name: string,
+    key: string,
+  ): ValueUpdateResult {
+    try {
+      runtime.setSelection(name, key);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: errorMessage(error) };
+    }
   }
 
   private renderErrors(

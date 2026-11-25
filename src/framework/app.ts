@@ -3,7 +3,9 @@ import type {
   CategoryManifest,
   CategoryManifestEntry,
   CategoryModule,
+  TableDefinition,
 } from './types.js';
+import { TableRegistry } from './tables.js';
 import { isValidIdentifier, validateCalculatorDefinition } from './validate.js';
 
 /** A calculator together with its fully qualified identity. */
@@ -29,6 +31,7 @@ export class CategoryHandle {
 
   private readonly loader: () => Promise<CategoryModule>;
   private readonly calculatorsById = new Map<string, RegisteredCalculator>();
+  private readonly tableRegistry = new TableRegistry();
   private loadPromise: Promise<readonly RegisteredCalculator[]> | null = null;
   private loaded = false;
 
@@ -50,6 +53,23 @@ export class CategoryHandle {
 
   get calculators(): readonly RegisteredCalculator[] {
     return [...this.calculatorsById.values()];
+  }
+
+  get tables(): readonly TableDefinition[] {
+    return this.tableRegistry.all;
+  }
+
+  /** Registers a table that calculators in this category can reference. */
+  addTable(table: TableDefinition): TableDefinition {
+    return this.tableRegistry.add(table);
+  }
+
+  getTable(tableId: string): TableDefinition | undefined {
+    return this.tableRegistry.getTable(tableId);
+  }
+
+  requireTable(tableId: string): TableDefinition {
+    return this.tableRegistry.requireTable(tableId);
   }
 
   /**
@@ -97,6 +117,9 @@ export class CategoryHandle {
   private async performLoad(): Promise<readonly RegisteredCalculator[]> {
     try {
       const module = await this.loader();
+      for (const table of module.tables ?? []) {
+        this.addTable(table);
+      }
       for (const definition of module.calculators) {
         this.add(definition);
       }

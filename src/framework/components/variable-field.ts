@@ -7,22 +7,43 @@ const COMMIT_DELAY_MS = 100;
 
 let nextFieldId = 0;
 
-/** Everything a single value field needs, derived from the runtime. */
-export interface FieldModel {
+/** One row offered by a table-select dropdown. */
+export interface FieldChoice {
+  readonly key: string;
+  readonly label: string;
+}
+
+interface FieldBase {
   readonly name: string;
   readonly label: string;
   readonly description: string;
+  readonly editable: boolean;
+  readonly computable: boolean;
+  readonly pinned: boolean;
+  readonly issues: readonly string[];
+}
+
+/** A numeric value with a unit selector. */
+export interface NumberFieldModel extends FieldBase {
+  readonly kind: 'number';
   /** Value already converted to the display unit and formatted. */
   readonly value: string;
   /** Shown when the field has no value, for example "Needs current". */
   readonly placeholder: string;
   readonly unit: UnitSymbol;
   readonly unitChoices: readonly UnitSymbol[];
-  readonly editable: boolean;
-  readonly computable: boolean;
-  readonly pinned: boolean;
-  readonly issues: readonly string[];
 }
+
+/** A dropdown that selects one row of a table. */
+export interface TableSelectFieldModel extends FieldBase {
+  readonly kind: 'tableSelect';
+  /** Selected row key, or an empty string when nothing is selected. */
+  readonly value: string;
+  readonly choices: readonly FieldChoice[];
+}
+
+/** Everything a single value field needs, derived from the runtime. */
+export type FieldModel = NumberFieldModel | TableSelectFieldModel;
 
 /**
  * One labelled value box with a unit selector and an optional Calculate
@@ -37,6 +58,7 @@ export class VariableField extends LitElement {
 
   onCommit: (text: string) => ValueUpdateResult = () => ({ ok: true });
   onUnitChange: (unit: UnitSymbol) => void = () => {};
+  onSelectionChange: (key: string) => ValueUpdateResult = () => ({ ok: true });
   onCalculate: () => void = () => {};
 
   private localError = '';
@@ -54,8 +76,18 @@ export class VariableField extends LitElement {
 
   override updated(): void {
     const model = this.model;
+    if (model === undefined) {
+      return;
+    }
+    if (model.kind === 'tableSelect') {
+      const select = this.querySelect();
+      if (select !== null && select.value !== model.value) {
+        select.value = model.value;
+      }
+      return;
+    }
     const input = this.inputElement;
-    if (model === undefined || input === null) {
+    if (input === null) {
       return;
     }
     if (document.activeElement === input) {
@@ -83,59 +115,13 @@ export class VariableField extends LitElement {
           <label class="calc-field-label" for=${this.inputId}>
             ${model.label}
           </label>
-          ${
-            model.pinned
-              ? html`<span class="calc-badge" title="Held fixed by the user">
-                  input
-                </span>`
-              : nothing
-          }
+          ${this.renderPinnedBadge(model)}
         </div>
-        <div class="calc-field-input">
-          <input
-            id=${this.inputId}
-            class="form-control calc-value-input"
-            type="text"
-            inputmode="decimal"
-            autocomplete="off"
-            spellcheck="false"
-            data-testid=${`value-${model.name}`}
-            ?readonly=${!model.editable}
-            placeholder=${model.placeholder}
-            @input=${this.handleInput}
-            @change=${this.handleChange}
-            @keydown=${this.handleKeydown}
-          />
-          <select
-            class="form-control calc-unit-select"
-            aria-label=${`Unit for ${model.label}`}
-            data-testid=${`unit-${model.name}`}
-            @change=${this.handleUnitChange}
-          >
-            ${model.unitChoices.map(
-              (unit) => html`
-                <option value=${unit} ?selected=${unit === model.unit}>
-                  ${unit}
-                </option>
-              `,
-            )}
-          </select>
-          ${
-            model.computable
-              ? html`
-                  <button
-                    class="button calc-calculate"
-                    type="button"
-                    title=${`Solve for ${model.label}`}
-                    data-testid=${`calculate-${model.name}`}
-                    @click=${this.handleCalculate}
-                  >
-                    Calculate
-                  </button>
-                `
-              : nothing
-          }
-        </div>
+        ${
+          model.kind === 'tableSelect'
+            ? this.renderSelect(model)
+            : this.renderNumberInput(model)
+        }
         ${
           model.description === ''
             ? nothing
@@ -154,8 +140,107 @@ export class VariableField extends LitElement {
     `;
   }
 
+  private renderPinnedBadge(
+    model: FieldModel,
+  ): TemplateResult | typeof nothing {
+    if (!model.pinned) {
+      return nothing;
+    }
+    return html`
+      <span class="calc-badge" title="Held fixed by the user">input</span>
+    `;
+  }
+
+  private renderNumberInput(model: NumberFieldModel): TemplateResult {
+    return html`
+      <div class="calc-field-input">
+        <input
+          id=${this.inputId}
+          class="form-control calc-value-input"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
+          spellcheck="false"
+          data-testid=${`value-${model.name}`}
+          ?readonly=${!model.editable}
+          placeholder=${model.placeholder}
+          @input=${this.handleInput}
+          @change=${this.handleChange}
+          @keydown=${this.handleKeydown}
+        />
+        <select
+          class="form-control calc-unit-select"
+          aria-label=${`Unit for ${model.label}`}
+          data-testid=${`unit-${model.name}`}
+          @change=${this.handleUnitChange}
+        >
+          ${model.unitChoices.map(
+            (unit) => html`
+              <option value=${unit} ?selected=${unit === model.unit}>
+                ${unit}
+              </option>
+            `,
+          )}
+        </select>
+        ${this.renderCalculateButton(model)}
+      </div>
+    `;
+  }
+
+  private renderSelect(model: TableSelectFieldModel): TemplateResult {
+    return html`
+      <div class="calc-field-input">
+        <select
+          id=${this.inputId}
+          class="form-control calc-table-select"
+          data-testid=${`value-${model.name}`}
+          ?disabled=${!model.editable}
+          @change=${this.handleSelectionChange}
+        >
+          <option value="" ?selected=${model.value === ''}>
+            — choose a row —
+          </option>
+          ${model.choices.map(
+            (choice) => html`
+              <option
+                value=${choice.key}
+                ?selected=${choice.key === model.value}
+              >
+                ${choice.label}
+              </option>
+            `,
+          )}
+        </select>
+        ${this.renderCalculateButton(model)}
+      </div>
+    `;
+  }
+
+  private renderCalculateButton(
+    model: FieldModel,
+  ): TemplateResult | typeof nothing {
+    if (!model.computable) {
+      return nothing;
+    }
+    return html`
+      <button
+        class="button calc-calculate"
+        type="button"
+        title=${`Solve for ${model.label}`}
+        data-testid=${`calculate-${model.name}`}
+        @click=${this.handleCalculate}
+      >
+        Calculate
+      </button>
+    `;
+  }
+
   private get inputElement(): HTMLInputElement | null {
     return this.querySelector<HTMLInputElement>('input.calc-value-input');
+  }
+
+  private querySelect(): HTMLSelectElement | null {
+    return this.querySelector<HTMLSelectElement>('select.calc-table-select');
   }
 
   private readonly handleInput = (): void => {
@@ -186,17 +271,36 @@ export class VariableField extends LitElement {
     if (!(target instanceof HTMLSelectElement)) {
       return;
     }
-    const unit = this.model?.unitChoices.find(
-      (choice) => choice === target.value,
-    );
+    const model = this.model;
+    if (model === undefined || model.kind !== 'number') {
+      return;
+    }
+    const unit = model.unitChoices.find((choice) => choice === target.value);
     if (unit === undefined) {
       return;
     }
     this.onUnitChange(unit);
   };
 
+  private readonly handleSelectionChange = (event: Event): void => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    this.localError = '';
+    const result = this.onSelectionChange(target.value);
+    if (!result.ok) {
+      this.localError = result.message ?? 'That row cannot be selected.';
+    }
+    this.requestUpdate();
+  };
+
   private readonly handleCalculate = (): void => {
     this.cancelTimer();
+    if (this.model?.kind === 'tableSelect') {
+      this.onCalculate();
+      return;
+    }
     if (this.commitNow()) {
       this.onCalculate();
     }

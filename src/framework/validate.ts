@@ -1,5 +1,6 @@
 import { CalculatorDefinitionError } from './errors.js';
-import type { CalculatorDefinition } from './types.js';
+import type { CalculatorDefinition, VariableDefinition } from './types.js';
+import { isTableFieldVariable, isTableSelectVariable } from './types.js';
 import { measureOf, tryDescribeUnit } from './units.js';
 import type { UnitSymbol } from './units.js';
 
@@ -13,7 +14,8 @@ export function isValidIdentifier(value: string): boolean {
 
 /**
  * Rejects definitions that would make the runtime behave unpredictably.
- * Called by every registration and by the runtime constructor.
+ * Called by every registration and by the runtime constructor. Table contents
+ * are checked separately by the table registry.
  */
 export function validateCalculatorDefinition(
   definition: CalculatorDefinition,
@@ -33,8 +35,8 @@ export function validateCalculatorDefinition(
     problems.push('at least one variable is required.');
   }
 
-  const variableNames = new Set<string>();
-  let computableCount = 0;
+  const variablesByName = new Map<string, VariableDefinition>();
+  let solvableCount = 0;
 
   for (const [index, variable] of definition.variables.entries()) {
     const where = `variable ${index + 1} ("${variable.name}")`;
@@ -44,24 +46,13 @@ export function validateCalculatorDefinition(
         `${where}: name must start with a letter and contain only ` +
           'letters, digits, and underscores.',
       );
-    } else if (variableNames.has(variable.name)) {
+    } else if (variablesByName.has(variable.name)) {
       problems.push(`${where}: duplicate name.`);
     }
-    variableNames.add(variable.name);
+    variablesByName.set(variable.name, variable);
 
     if (variable.label.trim() === '') {
       problems.push(`${where}: label must not be empty.`);
-    }
-
-    const baseDescription = tryDescribeUnit(variable.unit);
-    if (baseDescription === null) {
-      problems.push(`${where}: unknown unit "${variable.unit}".`);
-    } else if (variable.unitOptions !== undefined) {
-      validateUnitOptions(where, variable.unit, variable.unitOptions, problems);
-    }
-
-    if (variable.computable !== undefined) {
-      computableCount += 1;
     }
     if (
       variable.editable !== undefined &&
@@ -72,16 +63,41 @@ export function validateCalculatorDefinition(
     if (variable.input !== undefined && typeof variable.input !== 'boolean') {
       problems.push(`${where}: input must be a boolean.`);
     }
+
+    if (isTableSelectVariable(variable)) {
+      solvableCount += 1;
+      validateTableSelect(where, variable, problems);
+    } else {
+      if (isTableFieldVariable(variable)) {
+        solvableCount += 1;
+      } else if (variable.computable !== undefined) {
+        solvableCount += 1;
+      }
+      validateNumberVariable(where, variable, problems);
+    }
   }
 
-  if (computableCount === 0) {
-    problems.push('at least one variable must be computable.');
+  for (const [index, variable] of definition.variables.entries()) {
+    if (!isTableSelectVariable(variable) && isTableFieldVariable(variable)) {
+      validateTableFieldReference(
+        `variable ${index + 1} ("${variable.name}")`,
+        variable.tableSelect,
+        variablesByName,
+        problems,
+      );
+    }
+  }
+
+  if (solvableCount === 0) {
+    problems.push(
+      'at least one variable must be computable or derive from a table.',
+    );
   }
 
   for (const [index, state] of (definition.testCases ?? []).entries()) {
     const where = `test case ${index + 1}`;
     for (const key of Object.keys(state)) {
-      if (!variableNames.has(key)) {
+      if (!variablesByName.has(key)) {
         problems.push(`${where}: unknown variable "${key}".`);
       }
     }
@@ -92,6 +108,14 @@ export function validateCalculatorDefinition(
       }
       const value = state[variable.name];
       if (value === null) {
+        continue;
+      }
+      if (isTableSelectVariable(variable)) {
+        if (typeof value !== 'string') {
+          problems.push(
+            `${where}: "${variable.name}" must be a row key or null.`,
+          );
+        }
         continue;
       }
       if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -105,6 +129,89 @@ export function validateCalculatorDefinition(
   if (problems.length > 0) {
     throw new CalculatorDefinitionError(
       `Invalid calculator "${definition.id}":\n- ${problems.join('\n- ')}`,
+    );
+  }
+}
+
+function validateTableSelect(
+  where: string,
+  variable: VariableDefinition,
+  problems: string[],
+): void {
+  if (!isValidIdentifier(variable.table ?? '')) {
+    problems.push(
+      `${where}: table must be a lowercase, hyphenated table id.`,
+    );
+  }
+  if (variable.unit !== undefined) {
+    problems.push(`${where}: a table-select variable must not have a unit.`);
+  }
+  if (variable.unitOptions !== undefined) {
+    problems.push(
+      `${where}: a table-select variable must not have unit options.`,
+    );
+  }
+  if (variable.computable !== undefined) {
+    problems.push(
+      `${where}: a table-select variable is derived and must not have a ` +
+        'computable function.',
+    );
+  }
+  if (variable.tableSelect !== undefined || variable.tableField !== undefined) {
+    problems.push(
+      `${where}: a table-select variable cannot also reference another ` +
+        'table select.',
+    );
+  }
+}
+
+function validateNumberVariable(
+  where: string,
+  variable: Extract<VariableDefinition, { unit: UnitSymbol }>,
+  problems: string[],
+): void {
+  const baseDescription = tryDescribeUnit(variable.unit);
+  if (baseDescription === null) {
+    problems.push(`${where}: unknown unit "${variable.unit}".`);
+  } else if (variable.unitOptions !== undefined) {
+    validateUnitOptions(where, variable.unit, variable.unitOptions, problems);
+  }
+
+  const hasSelect = variable.tableSelect !== undefined;
+  const hasField = variable.tableField !== undefined;
+  if (hasSelect !== hasField) {
+    problems.push(
+      `${where}: tableSelect and tableField must be provided together.`,
+    );
+  }
+  if (hasField && variable.tableField === '') {
+    problems.push(`${where}: tableField must not be empty.`);
+  }
+  if (hasSelect && variable.computable !== undefined) {
+    problems.push(
+      `${where}: a table-derived variable must not also have a computable ` +
+        'function.',
+    );
+  }
+}
+
+function validateTableFieldReference(
+  where: string,
+  selectName: string | undefined,
+  variablesByName: ReadonlyMap<string, VariableDefinition>,
+  problems: string[],
+): void {
+  if (selectName === undefined) {
+    return;
+  }
+  const select = variablesByName.get(selectName);
+  if (select === undefined) {
+    problems.push(`${where}: tableSelect "${selectName}" is not a variable.`);
+    return;
+  }
+  if (!isTableSelectVariable(select)) {
+    problems.push(
+      `${where}: tableSelect "${selectName}" is not a table-select variable.`,
     );
   }
 }

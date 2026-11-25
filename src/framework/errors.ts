@@ -9,6 +9,16 @@ export class CalculatorDefinitionError extends Error {
 }
 
 /**
+ * Raised when a table definition cannot be used safely.
+ */
+export class TableDefinitionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TableDefinitionError';
+  }
+}
+
+/**
  * Raised when a saved state cannot be applied to a calculator.
  */
 export class StateLoadError extends Error {

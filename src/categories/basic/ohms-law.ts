@@ -1,11 +1,10 @@
 import { missing } from '../../framework/missing.js';
 import type {
   CalcState,
-  CalcValue,
   CalculatorDefinition,
 } from '../../framework/types.js';
 
-function valueOf(state: Readonly<CalcState>, name: string): CalcValue {
+function valueOf(state: Readonly<CalcState>, name: string): number | null {
   const value = state[name];
   return typeof value === 'number' ? value : null;
 }

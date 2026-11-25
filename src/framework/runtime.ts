@@ -1,13 +1,34 @@
-import { errorMessage, StateLoadError } from './errors.js';
+import {
+  CalculatorDefinitionError,
+  errorMessage,
+  StateLoadError,
+} from './errors.js';
 import { formatNumber, parseNumberText } from './format.js';
 import { isMissing } from './missing.js';
 import type { MissingValue } from './missing.js';
+import {
+  findColumn,
+  findRow,
+  isNumericColumn,
+  numericCell,
+  rowKey,
+  rowLabel,
+} from './tables.js';
 import type {
   CalcState,
   CalcValue,
   CalculatorDefinition,
+  NumberVariableDefinition,
+  TableColumn,
+  TableDefinition,
+  TableResolver,
+  TableSelectVariableDefinition,
   ValidationIssue,
   VariableDefinition,
+} from './types.js';
+import {
+  isTableFieldVariable,
+  isTableSelectVariable,
 } from './types.js';
 import { choicesForUnit, convertUnit, measureOf } from './units.js';
 import type { UnitSymbol } from './units.js';
@@ -25,6 +46,12 @@ export interface ValueUpdateResult {
   readonly message?: string;
 }
 
+/** One row offered by a table-select field. */
+export interface TableChoice {
+  readonly key: string;
+  readonly label: string;
+}
+
 /** Everything needed to restore a calculator exactly. */
 export interface CalculatorSnapshot {
   readonly state: CalcState;
@@ -34,18 +61,31 @@ export interface CalculatorSnapshot {
 /** Called after every state or display-unit change. */
 export type RuntimeListener = () => void;
 
+interface TableSelectBinding {
+  readonly variable: TableSelectVariableDefinition;
+  readonly table: TableDefinition;
+}
+
+interface TableFieldBinding {
+  readonly variable: NumberVariableDefinition;
+  readonly table: TableDefinition;
+  readonly column: TableColumn;
+  readonly columnUnit: UnitSymbol;
+  readonly selectName: string;
+}
+
 /**
- * Compares two calculator values, treating very small differences as equal so
- * that decimal conversions and repeated formulas do not cause extra compute
- * rounds.
+ * Compares two calculator values, treating very small numeric differences as
+ * equal so decimal conversions and repeated formulas do not cause extra
+ * compute rounds. Strings and nulls are equal only to themselves.
  */
 export function nearlyEqual(
-  left: number | null,
-  right: number | null,
+  left: CalcValue,
+  right: CalcValue,
   relativeTolerance = DEFAULT_RELATIVE_TOLERANCE,
   absoluteTolerance = DEFAULT_ABSOLUTE_TOLERANCE,
 ): boolean {
-  if (left === null || right === null) {
+  if (typeof left !== 'number' || typeof right !== 'number') {
     return left === right;
   }
   if (left === right) {
@@ -74,8 +114,12 @@ export class CalculatorRuntime {
   private readonly choicesByVariable = new Map<string, UnitSymbol[]>();
   private readonly displayUnits = new Map<string, UnitSymbol>();
   private readonly listeners = new Set<RuntimeListener>();
-  private readonly computableNames: readonly string[];
+  private readonly derivedNames: readonly string[];
+  private readonly derivedNameSet: ReadonlySet<string>;
   private readonly missingNeeds = new Map<string, readonly string[]>();
+  private readonly tableSelects = new Map<string, TableSelectBinding>();
+  private readonly tableFields = new Map<string, TableFieldBinding>();
+  private readonly tableFieldsBySelect = new Map<string, TableFieldBinding[]>();
 
   private values: CalcState = {};
   private pinnedNames = new Set<string>();
@@ -85,24 +129,29 @@ export class CalculatorRuntime {
   private errorMessages: string[] = [];
   private issues: ValidationIssue[] = [];
 
-  constructor(definition: CalculatorDefinition) {
+  constructor(definition: CalculatorDefinition, tables?: TableResolver) {
     validateCalculatorDefinition(definition);
     this.definition = definition;
 
     for (const variable of definition.variables) {
       this.variablesByName.set(variable.name, variable);
-      this.choicesByVariable.set(
-        variable.name,
-        choicesForUnit(variable.unit, variable.unitOptions),
-      );
       this.values[variable.name] = null;
-      this.displayUnits.set(variable.name, variable.unit);
+      if (!isTableSelectVariable(variable)) {
+        this.choicesByVariable.set(
+          variable.name,
+          choicesForUnit(variable.unit, variable.unitOptions),
+        );
+        this.displayUnits.set(variable.name, variable.unit);
+      }
     }
 
-    this.computableNames = definition.variables
-      .filter((variable) => variable.computable !== undefined)
+    this.bindTables(tables);
+
+    this.derivedNames = definition.variables
+      .filter((variable) => this.isDerived(variable))
       .map((variable) => variable.name);
-    this.order = [...this.computableNames];
+    this.derivedNameSet = new Set(this.derivedNames);
+    this.order = [...this.derivedNames];
     this.recompute();
   }
 
@@ -128,7 +177,7 @@ export class CalculatorRuntime {
     return [...this.issues];
   }
 
-  /** Computable variables in the order they are solved. */
+  /** Derived variables in the order they are solved. */
   get computeOrder(): readonly string[] {
     return [...this.order];
   }
@@ -137,8 +186,38 @@ export class CalculatorRuntime {
     return this.requireVariable(name);
   }
 
+  isTableSelect(name: string): boolean {
+    return isTableSelectVariable(this.requireVariable(name));
+  }
+
+  /** Table behind a table-select variable, or null for numeric variables. */
+  tableFor(name: string): TableDefinition | null {
+    return this.tableSelects.get(name)?.table ?? null;
+  }
+
+  /** Rows offered by a table-select field. */
+  tableChoices(name: string): readonly TableChoice[] {
+    const binding = this.requireTableSelect(name);
+    const choices: TableChoice[] = [];
+    for (const row of binding.table.rows) {
+      const key = rowKey(binding.table, row);
+      if (key === null) {
+        continue;
+      }
+      choices.push({ key, label: rowLabel(binding.table, row) });
+    }
+    return choices;
+  }
+
+  /** Selected row key, or null when no row is selected. */
+  selectedKey(name: string): string | null {
+    this.requireTableSelect(name);
+    const value = this.values[name];
+    return typeof value === 'string' ? value : null;
+  }
+
   isComputable(name: string): boolean {
-    return this.requireVariable(name).computable !== undefined;
+    return this.derivedNameSet.has(name);
   }
 
   isEditable(name: string): boolean {
@@ -163,6 +242,10 @@ export class CalculatorRuntime {
 
   /** Human readable explanation of what a variable still needs. */
   missingLabel(name: string): string {
+    const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      return this.values[name] === null ? 'Select a row' : '';
+    }
     const needs = this.missingNeedsFor(name);
     if (needs.length === 0) {
       return '';
@@ -173,25 +256,43 @@ export class CalculatorRuntime {
     return `Needs ${joinWithAnd(labels)}`;
   }
 
-  displayUnitFor(name: string): UnitSymbol {
+  /** Display unit for a numeric variable; null for table selects. */
+  displayUnitFor(name: string): UnitSymbol | null {
     const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      return null;
+    }
     return this.displayUnits.get(name) ?? variable.unit;
   }
 
   unitChoices(name: string): readonly UnitSymbol[] {
-    this.requireVariable(name);
+    const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      return [];
+    }
     return [...(this.choicesByVariable.get(name) ?? [])];
   }
 
   /** Value converted to its display unit and formatted for the field. */
   formattedValue(name: string): string {
     const variable = this.requireVariable(name);
-    const value = this.values[name] ?? null;
-    if (value === null) {
+    if (isTableSelectVariable(variable)) {
+      const binding = this.requireTableSelect(name);
+      const selected = this.selectedKey(name);
+      if (selected === null) {
+        return '';
+      }
+      const row = findRow(binding.table, selected);
+      return row === undefined ? '' : rowLabel(binding.table, row);
+    }
+
+    const value = this.values[name];
+    if (typeof value !== 'number') {
       return '';
     }
-    const displayUnit = this.displayUnitFor(name);
-    return formatNumber(convertUnit(value, variable.unit, displayUnit));
+    const baseUnit = variable.unit;
+    const displayUnit = this.displayUnitFor(name) ?? baseUnit;
+    return formatNumber(convertUnit(value, baseUnit, displayUnit));
   }
 
   issuesFor(name: string): readonly ValidationIssue[] {
@@ -205,6 +306,12 @@ export class CalculatorRuntime {
    */
   setDisplayText(name: string, text: string): ValueUpdateResult {
     const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      return {
+        ok: false,
+        message: `${variable.label} is chosen from the table list.`,
+      };
+    }
     if (!this.isEditable(name)) {
       return { ok: false, message: `${variable.label} is read-only.` };
     }
@@ -216,16 +323,47 @@ export class CalculatorRuntime {
       return { ok: false, message: errorMessage(error) };
     }
 
-    const displayUnit = this.displayUnitFor(name);
+    const displayUnit = this.displayUnitFor(name) ?? variable.unit;
     const baseValue =
       parsed === null ? null : convertUnit(parsed, displayUnit, variable.unit);
+    this.prepareTableFieldEdit(name, baseValue);
     this.setValue(name, baseValue);
     return { ok: true };
   }
 
-  /** Changes only how a variable is displayed; stored values keep base units. */
+  /**
+   * Chooses a row for a table-select field. Referencing fields are unpinned so
+   * they refresh from the new selection. Passing null or an empty string
+   * clears the selection.
+   */
+  setSelection(name: string, key: string | null): void {
+    const binding = this.requireTableSelect(name);
+    if (!this.isEditable(name)) {
+      throw new Error(`${binding.variable.label} is read-only.`);
+    }
+    const normalized = key === '' ? null : key;
+    const rowMissing =
+      normalized !== null && findRow(binding.table, normalized) === undefined;
+    if (rowMissing) {
+      throw new RangeError(
+        `Row "${normalized}" is not in table "${binding.table.id}".`,
+      );
+    }
+
+    for (const field of this.tableFieldsBySelect.get(name) ?? []) {
+      this.pinnedNames.delete(field.variable.name);
+    }
+    this.setValue(name, normalized);
+  }
+
+  /** Changes display units only; stored values keep their base units. */
   setDisplayUnit(name: string, unit: UnitSymbol): void {
     const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      throw new RangeError(
+        `${variable.label} does not have a display unit.`,
+      );
+    }
     const choices = this.choicesByVariable.get(name) ?? [];
     if (!choices.includes(unit)) {
       throw new RangeError(
@@ -247,7 +385,7 @@ export class CalculatorRuntime {
    */
   calculate(name: string): void {
     const variable = this.requireVariable(name);
-    if (variable.computable === undefined) {
+    if (!this.isComputable(name)) {
       throw new Error(`${variable.label} is not computable.`);
     }
 
@@ -306,10 +444,12 @@ export class CalculatorRuntime {
   reset(): void {
     for (const variable of this.definition.variables) {
       this.values[variable.name] = null;
-      this.displayUnits.set(variable.name, variable.unit);
+      if (!isTableSelectVariable(variable)) {
+        this.displayUnits.set(variable.name, variable.unit);
+      }
     }
     this.pinnedNames = new Set();
-    this.order = [...this.computableNames];
+    this.order = [...this.derivedNames];
     this.lastTouchedName = null;
     this.recompute();
   }
@@ -326,7 +466,9 @@ export class CalculatorRuntime {
 
     const displayUnits = new Map<string, UnitSymbol>();
     for (const variable of this.definition.variables) {
-      displayUnits.set(variable.name, variable.unit);
+      if (!isTableSelectVariable(variable)) {
+        displayUnits.set(variable.name, variable.unit);
+      }
     }
     if (units !== undefined) {
       for (const [name, unit] of Object.entries(units)) {
@@ -334,6 +476,11 @@ export class CalculatorRuntime {
         if (variable === undefined) {
           throw new StateLoadError(
             `Saved state has unknown variable "${name}".`,
+          );
+        }
+        if (isTableSelectVariable(variable)) {
+          throw new StateLoadError(
+            `Saved unit for "${name}" is not valid for a table select.`,
           );
         }
         if (measureOf(unit) !== measureOf(variable.unit)) {
@@ -355,7 +502,7 @@ export class CalculatorRuntime {
         .filter(([, value]) => value !== null)
         .map(([name]) => name),
     );
-    this.order = [...this.computableNames];
+    this.order = [...this.derivedNames];
     this.lastTouchedName = null;
     this.recompute();
   }
@@ -376,8 +523,111 @@ export class CalculatorRuntime {
     };
   }
 
+  private bindTables(tables: TableResolver | undefined): void {
+    for (const variable of this.definition.variables) {
+      if (!isTableSelectVariable(variable)) {
+        continue;
+      }
+      const table = this.resolveTable(variable, tables);
+      this.tableSelects.set(variable.name, { variable, table });
+    }
+
+    for (const variable of this.definition.variables) {
+      if (isTableSelectVariable(variable) || !isTableFieldVariable(variable)) {
+        continue;
+      }
+      const selectName = variable.tableSelect;
+      const fieldKey = variable.tableField;
+      if (selectName === undefined || fieldKey === undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} must name both a table select and a column.`,
+        );
+      }
+      const select = this.tableSelects.get(selectName);
+      if (select === undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} references unknown table select "${selectName}".`,
+        );
+      }
+      const column = findColumn(select.table, fieldKey);
+      if (column === undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} references unknown column "${fieldKey}" in ` +
+            `table "${select.table.id}".`,
+        );
+      }
+      if (!isNumericColumn(column) || column.unit === undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} must reference a numeric column; ` +
+            `"${fieldKey}" is text.`,
+        );
+      }
+      if (measureOf(column.unit) !== measureOf(variable.unit)) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} uses "${variable.unit}" but column ` +
+            `"${fieldKey}" uses "${column.unit}".`,
+        );
+      }
+
+      const binding: TableFieldBinding = {
+        variable,
+        table: select.table,
+        column,
+        columnUnit: column.unit,
+        selectName,
+      };
+      this.tableFields.set(variable.name, binding);
+      const siblings = this.tableFieldsBySelect.get(selectName) ?? [];
+      siblings.push(binding);
+      this.tableFieldsBySelect.set(selectName, siblings);
+    }
+  }
+
+  private resolveTable(
+    variable: TableSelectVariableDefinition,
+    tables: TableResolver | undefined,
+  ): TableDefinition {
+    if (tables === undefined) {
+      throw new CalculatorDefinitionError(
+        `${variable.label} references table "${variable.table}", but no ` +
+          'table registry was supplied to the runtime.',
+      );
+    }
+    const table = tables.getTable(variable.table);
+    if (table === undefined) {
+      throw new CalculatorDefinitionError(
+        `${variable.label} references unknown table "${variable.table}".`,
+      );
+    }
+    return table;
+  }
+
+  private isDerived(variable: VariableDefinition): boolean {
+    if (isTableSelectVariable(variable)) {
+      return true;
+    }
+    return (
+      variable.computable !== undefined ||
+      isTableFieldVariable(variable)
+    );
+  }
+
   private computeVariable(name: string): boolean {
     const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      return this.computeTableSelect(variable);
+    }
+    const field = this.tableFields.get(name);
+    if (field !== undefined) {
+      return this.computeTableField(name, field);
+    }
+    return this.computeNumber(name, variable);
+  }
+
+  private computeNumber(
+    name: string,
+    variable: NumberVariableDefinition,
+  ): boolean {
     const computable = variable.computable;
     if (computable === undefined) {
       return false;
@@ -410,6 +660,108 @@ export class CalculatorRuntime {
     return variable.input !== false;
   }
 
+  private computeTableSelect(
+    variable: TableSelectVariableDefinition,
+  ): boolean {
+    const binding = this.tableSelects.get(variable.name);
+    if (binding === undefined) {
+      return false;
+    }
+    const next = this.deriveSelectionKey(binding);
+    const current = this.values[variable.name] ?? null;
+    if (current === next) {
+      return false;
+    }
+    this.values[variable.name] = next;
+    this.missingNeeds.delete(variable.name);
+    return variable.input !== false;
+  }
+
+  private computeTableField(
+    name: string,
+    binding: TableFieldBinding,
+  ): boolean {
+    const next = this.deriveTableFieldValue(binding);
+    if (next === null) {
+      return false;
+    }
+    const current = this.values[name] ?? null;
+    if (nearlyEqual(current, next)) {
+      return false;
+    }
+    this.values[name] = next;
+    this.missingNeeds.delete(name);
+    return binding.variable.input !== false;
+  }
+
+  /**
+   * Brute-force search for the single row matching every referencing field
+   * that currently has a value. No matches or several matches select nothing.
+   */
+  private deriveSelectionKey(binding: TableSelectBinding): string | null {
+    const constraints = (this.tableFieldsBySelect.get(binding.variable.name) ??
+      [])
+      .map((field) => ({
+        field,
+        value: this.values[field.variable.name],
+      }))
+      .filter(
+        (entry): entry is { field: TableFieldBinding; value: number } =>
+          typeof entry.value === 'number' && Number.isFinite(entry.value),
+      );
+    if (constraints.length === 0) {
+      return null;
+    }
+
+    const matches = binding.table.rows.filter((row) =>
+      constraints.every(({ field, value }) => {
+        const cell = numericCell(row[field.column.key]);
+        if (cell === null) {
+          return false;
+        }
+        const converted = convertUnit(
+          value,
+          field.variable.unit,
+          field.columnUnit,
+        );
+        return nearlyEqual(cell, converted);
+      }),
+    );
+    if (matches.length !== 1) {
+      return null;
+    }
+    const [match] = matches;
+    return match === undefined ? null : rowKey(binding.table, match);
+  }
+
+  private deriveTableFieldValue(
+    binding: TableFieldBinding,
+  ): number | null {
+    const selected = this.tableSelects.get(binding.selectName);
+    if (selected === undefined) {
+      return null;
+    }
+    const key = this.selectedKey(binding.selectName);
+    if (key === null) {
+      return null;
+    }
+    const row = findRow(selected.table, key);
+    if (row === undefined) {
+      this.addError(
+        `Row "${key}" is missing from table "${selected.table.id}".`,
+      );
+      return null;
+    }
+    const cell = numericCell(row[binding.column.key]);
+    if (cell === null) {
+      this.addError(
+        `${binding.column.label} is empty for row "${key}".`,
+      );
+      return null;
+    }
+    return convertUnit(cell, binding.columnUnit, binding.variable.unit);
+  }
+
   private setValue(name: string, value: CalcValue): void {
     this.values[name] = value;
     this.pinnedNames.add(name);
@@ -422,7 +774,32 @@ export class CalculatorRuntime {
   }
 
   /**
-   * If every computable value is pinned, a change would leave the state
+   * A user edit of one table column makes the other derived columns stale.
+   * Clear them and unpin the select so the edited value alone decides which
+   * row matches.
+   */
+  private prepareTableFieldEdit(name: string, value: number | null): void {
+    const binding = this.tableFields.get(name);
+    if (binding === undefined) {
+      return;
+    }
+    this.pinnedNames.delete(binding.selectName);
+    if (value === null) {
+      return;
+    }
+    for (const sibling of this.tableFieldsBySelect.get(binding.selectName) ??
+      []) {
+      if (sibling.variable.name === name) {
+        continue;
+      }
+      this.values[sibling.variable.name] = null;
+      this.pinnedNames.delete(sibling.variable.name);
+      this.missingNeeds.delete(sibling.variable.name);
+    }
+  }
+
+  /**
+   * If every derived value is pinned, a change would leave the state
    * untouched. Unpin one value so the runtime recomputes it from the user's
    * inputs instead of displaying contradictory values.
    *
@@ -437,7 +814,7 @@ export class CalculatorRuntime {
    * sources that may not exist.
    */
   private resolvePinnedDeadlock(): void {
-    const allPinned = this.computableNames.every((name) =>
+    const allPinned = this.derivedNames.every((name) =>
       this.pinnedNames.has(name),
     );
     if (!allPinned) {
@@ -457,12 +834,19 @@ export class CalculatorRuntime {
   }
 
   /**
-   * True when the variable's computable function produces a finite value from
-   * the current state. Used to avoid unpinning a variable that would only
-   * report missing dependencies.
+   * True when the variable can produce a value from the current state. Used to
+   * avoid unpinning a variable that would only report missing dependencies.
    */
   private canCompute(name: string): boolean {
     const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      const binding = this.tableSelects.get(name);
+      return binding !== undefined && this.deriveSelectionKey(binding) !== null;
+    }
+    const field = this.tableFields.get(name);
+    if (field !== undefined) {
+      return this.deriveTableFieldValue(field) !== null;
+    }
     const computable = variable.computable;
     if (computable === undefined) {
       return false;
@@ -476,60 +860,76 @@ export class CalculatorRuntime {
   }
 
   /**
-   * Every computable value being pinned is only safe when the values agree.
-   * A contradictory set (a hand-edited bookmark, for example) leaves nothing
-   * to compute, so the stale numbers would look like a valid result. Report
-   * the conflict so the user must pick which value to trust.
+   * A pinned value must agree with what the rest of the state implies. A
+   * contradictory set (a hand-edited bookmark or a stale table row) would
+   * otherwise look like a valid result because nothing is left to compute.
    */
   private reportConflictingValues(): void {
-    if (this.computableNames.length < 2) {
-      return;
-    }
-    const allPinned = this.computableNames.every((name) =>
-      this.pinnedNames.has(name),
-    );
-    if (!allPinned) {
-      return;
-    }
     const conflicting: string[] = [];
-    for (const name of this.computableNames) {
-      const variable = this.requireVariable(name);
-      const pinnedValue = this.values[name] ?? null;
-      if (pinnedValue === null || variable.computable === undefined) {
+    for (const name of this.derivedNames) {
+      if (!this.pinnedNames.has(name)) {
         continue;
       }
-      if (!this.agreesWithPinnedValue(name, pinnedValue)) {
+      const variable = this.requireVariable(name);
+      const current = this.values[name] ?? null;
+      if (current === null) {
+        continue;
+      }
+      if (this.valueDisagrees(name, variable, current)) {
         conflicting.push(variable.label);
       }
     }
     if (conflicting.length === 0) {
       return;
     }
+    const subject = joinWithAnd(conflicting);
+    const verdict =
+      conflicting.length === 1
+        ? 'does not match the other values.'
+        : 'cannot all hold at once.';
     this.addError(
-      `${joinWithAnd(conflicting)} cannot all hold at once. ` +
+      `${subject} ${verdict} ` +
         'Press Calculate on the value you trust to solve for the rest.',
     );
   }
 
-  /**
-   * Recomputes one pinned variable from every other value. A missing result
-   * means the variable cannot be checked, not that it is wrong.
-   */
-  private agreesWithPinnedValue(name: string, pinnedValue: number): boolean {
-    const computable = this.requireVariable(name).computable;
+  private valueDisagrees(
+    name: string,
+    variable: VariableDefinition,
+    current: CalcValue,
+  ): boolean {
+    if (isTableSelectVariable(variable)) {
+      const binding = this.tableSelects.get(name);
+      if (binding === undefined) {
+        return false;
+      }
+      const derived = this.deriveSelectionKey(binding);
+      return derived !== null && derived !== current;
+    }
+
+    const field = this.tableFields.get(name);
+    if (field !== undefined) {
+      const derived = this.deriveTableFieldValue(field);
+      if (derived === null) {
+        return false;
+      }
+      return typeof current !== 'number' || !nearlyEqual(current, derived);
+    }
+
+    const computable = variable.computable;
     if (computable === undefined) {
-      return true;
+      return false;
     }
     let result: number | MissingValue;
     try {
       result = computable(Object.freeze({ ...this.values, [name]: null }));
     } catch {
-      return true;
+      return false;
     }
     if (isMissing(result) || !Number.isFinite(result)) {
-      return true;
+      return false;
     }
-    return nearlyEqual(pinnedValue, result);
+    return typeof current !== 'number' || !nearlyEqual(current, result);
   }
 
   private runValidators(): void {
@@ -579,8 +979,21 @@ export class CalculatorRuntime {
           `Saved state is missing variable "${variable.name}".`,
         );
       }
-      const value = state[variable.name];
+      const value = state[variable.name] ?? null;
       if (value === null) {
+        continue;
+      }
+      if (isTableSelectVariable(variable)) {
+        const binding = this.tableSelects.get(variable.name);
+        if (
+          typeof value !== 'string' ||
+          binding === undefined ||
+          findRow(binding.table, value) === undefined
+        ) {
+          throw new StateLoadError(
+            `Saved value for "${variable.name}" is not a valid table row.`,
+          );
+        }
         continue;
       }
       if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -603,6 +1016,14 @@ export class CalculatorRuntime {
       throw new RangeError(`Unknown variable "${name}".`);
     }
     return variable;
+  }
+
+  private requireTableSelect(name: string): TableSelectBinding {
+    const binding = this.tableSelects.get(name);
+    if (binding === undefined) {
+      throw new RangeError(`Variable "${name}" is not a table select.`);
+    }
+    return binding;
   }
 
   private emit(): void {

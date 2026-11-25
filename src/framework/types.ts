@@ -2,28 +2,18 @@ import type { MissingValue } from './missing.js';
 import type { UnitSymbol } from './units.js';
 
 /** A calculator value in its variable's declared (base) unit. */
-export type CalcValue = number | null;
+export type CalcValue = number | string | null;
 
 /** The complete internal state of one calculator. */
 export type CalcState = Record<string, CalcValue>;
 
-/**
- * One value in a calculator. Values are always stored internally in `unit`;
- * display and input units are converted at the edges.
- */
-export interface VariableDefinition {
+/** Fields shared by every kind of calculator variable. */
+export interface VariableBase {
   /** Identifier used as a key in the state object. */
   readonly name: string;
   /** Human readable name shown in the UI and in messages. */
   readonly label: string;
-  /** Unit that the internal state is stored in. */
-  readonly unit: UnitSymbol;
-  /**
-   * Units offered in the unit selector. The base unit is always available,
-   * even when it is not listed. Defaults to every unit of the same kind.
-   */
-  readonly unitOptions?: readonly UnitSymbol[];
-  /** Whether the user may type a value. Defaults to true. */
+  /** Whether the user may type or select a value. Defaults to true. */
   readonly editable?: boolean;
   /**
    * Whether a change to this value should start another round of
@@ -33,15 +23,98 @@ export interface VariableDefinition {
   readonly input?: boolean;
   /** Explanation shown under the field. */
   readonly description?: string;
-  /**
-   * Computes the value from the state, or returns `missing([...])` when the
-   * inputs it needs are not available.
-   */
-  readonly computable?: (state: Readonly<CalcState>) => number | MissingValue;
   /** Returns a message (or messages) when the value is not acceptable. */
   readonly validate?: (
     state: Readonly<CalcState>,
   ) => readonly string[] | string | void;
+}
+
+/**
+ * One numeric value in a calculator. Values are always stored internally in
+ * `unit`; display and input units are converted at the edges.
+ */
+export interface NumberVariableDefinition extends VariableBase {
+  /** Unit that the internal state is stored in. */
+  readonly unit: UnitSymbol;
+  /**
+   * Units offered in the unit selector. The base unit is always available,
+   * even when it is not listed. Defaults to every unit of the same kind.
+   */
+  readonly unitOptions?: readonly UnitSymbol[];
+  /**
+   * Computes the value from the state, or returns `missing([...])` when the
+   * inputs it needs are not available. Omit this on variables derived from a
+   * table column via `tableSelect`/`tableField`.
+   */
+  readonly computable?: (state: Readonly<CalcState>) => number | MissingValue;
+  /** Name of a table-select variable whose selected row supplies this value. */
+  readonly tableSelect?: string;
+  /** Column in that table. Requires `tableSelect`. */
+  readonly tableField?: string;
+}
+
+/**
+ * A dropdown that selects one row of a table. The stored value is the row's
+ * key, or null when no row is selected.
+ */
+export interface TableSelectVariableDefinition extends VariableBase {
+  /** ID of the table whose rows this variable selects. */
+  readonly table: string;
+}
+
+/** One value in a calculator: numeric, or a table row selection. */
+export type VariableDefinition =
+  | NumberVariableDefinition
+  | TableSelectVariableDefinition;
+
+/** Narrows a variable to a table-select dropdown. */
+export function isTableSelectVariable(
+  variable: VariableDefinition,
+): variable is TableSelectVariableDefinition {
+  return variable.table !== undefined;
+}
+
+/** True when a numeric variable reads one column of a table selection. */
+export function isTableFieldVariable(
+  variable: NumberVariableDefinition,
+): boolean {
+  return variable.tableSelect !== undefined;
+}
+
+/** A cell value in a table row. */
+export type TableCell = string | number | null;
+
+/** One row of a table, keyed by column key. */
+export type TableRow = Readonly<Record<string, TableCell>>;
+
+/** One column in a table. A column is numeric exactly when it has a unit. */
+export interface TableColumn {
+  readonly key: string;
+  readonly label: string;
+  /** Numeric columns store values in this unit. Omit for text columns. */
+  readonly unit?: UnitSymbol;
+  readonly description?: string;
+}
+
+/**
+ * A plain data table. Rows are dictionaries keyed by column key. The table
+ * itself has no UI; views and calculators read the data.
+ */
+export interface TableDefinition {
+  readonly id: string;
+  readonly title: string;
+  readonly description?: string;
+  /** Text column with unique values used as the stored selection. */
+  readonly keyColumn: string;
+  /** Text column shown in the selector and table view. */
+  readonly labelColumn: string;
+  readonly columns: readonly TableColumn[];
+  readonly rows: readonly TableRow[];
+}
+
+/** Looks tables up by id for a calculator runtime. */
+export interface TableResolver {
+  getTable(id: string): TableDefinition | undefined;
 }
 
 /** A calculator is pure data; all UI lives elsewhere. */
@@ -58,6 +131,7 @@ export interface CalculatorDefinition {
 
 /** Shape of a lazily imported category module. */
 export interface CategoryModule {
+  readonly tables?: readonly TableDefinition[];
   readonly calculators: readonly CalculatorDefinition[];
 }
 

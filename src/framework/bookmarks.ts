@@ -7,6 +7,8 @@ import type { UnitSymbol } from './units.js';
 export const BOOKMARK_STORAGE_KEY = 'calcurio.bookmarks.v1';
 export const MAX_BOOKMARK_NAME_LENGTH = 80;
 export const MAX_BOOKMARKS_PER_CALCULATOR = 100;
+/** Longest text value (a table row key) accepted from stored bookmarks. */
+export const MAX_STATE_STRING_LENGTH = 200;
 
 /** Minimal storage surface, so tests can use an in-memory implementation. */
 export interface KeyValueStorage {
@@ -194,14 +196,7 @@ function parseBookmark(
   }
   const state: CalcState = {};
   for (const [variable, rawValue] of Object.entries(rawState)) {
-    if (rawValue === null) {
-      state[variable] = null;
-      continue;
-    }
-    if (typeof rawValue !== 'number' || !Number.isFinite(rawValue)) {
-      throw invalid(`${where} has a non-numeric value for "${variable}".`);
-    }
-    state[variable] = rawValue;
+    state[variable] = parseStateValue(where, variable, rawValue);
   }
 
   const rawUnits = value['units'];
@@ -217,6 +212,36 @@ function parseBookmark(
   }
 
   return { id, name, savedAt, state, units };
+}
+
+/**
+ * Stored state holds numbers for numeric variables and row keys for table
+ * selects. Anything else is corrupt data, so it is rejected loudly.
+ */
+function parseStateValue(
+  where: string,
+  variable: string,
+  rawValue: unknown,
+): CalcState[string] {
+  if (rawValue === null) {
+    return null;
+  }
+  if (typeof rawValue === 'number') {
+    if (!Number.isFinite(rawValue)) {
+      throw invalid(`${where} has a non-finite value for "${variable}".`);
+    }
+    return rawValue;
+  }
+  if (typeof rawValue === 'string') {
+    if (rawValue === '') {
+      throw invalid(`${where} has an empty value for "${variable}".`);
+    }
+    if (rawValue.length > MAX_STATE_STRING_LENGTH) {
+      throw invalid(`${where} has an overlong value for "${variable}".`);
+    }
+    return rawValue;
+  }
+  throw invalid(`${where} has an invalid value for "${variable}".`);
 }
 
 function cloneBookmark(bookmark: Bookmark): Bookmark {

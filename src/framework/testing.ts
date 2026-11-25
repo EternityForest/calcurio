@@ -5,11 +5,20 @@ import {
   DEFAULT_RELATIVE_TOLERANCE,
   nearlyEqual,
 } from './runtime.js';
-import type { CalcState, CalculatorDefinition } from './types.js';
+import type {
+  CalcState,
+  CalcValue,
+  CalculatorDefinition,
+  TableResolver,
+  VariableDefinition,
+} from './types.js';
+import { isTableSelectVariable } from './types.js';
 
 export interface CalculatorTestOptions {
   readonly relativeTolerance?: number;
   readonly absoluteTolerance?: number;
+  /** Tables the calculator refers to. Required for table-select variables. */
+  readonly tables?: TableResolver;
 }
 
 export interface CalculatorTestFailure {
@@ -36,7 +45,7 @@ export function runCalculatorTests(
   const failures: CalculatorTestFailure[] = [];
 
   for (const [caseIndex, expected] of (definition.testCases ?? []).entries()) {
-    const fullRuntime = new CalculatorRuntime(definition);
+    const fullRuntime = new CalculatorRuntime(definition, options.tables);
     fullRuntime.loadState(expected);
     verify(
       fullRuntime,
@@ -50,12 +59,12 @@ export function runCalculatorTests(
     );
 
     for (const variable of definition.variables) {
-      if (variable.computable === undefined) {
+      if (!isSolvable(variable)) {
         continue;
       }
       const partial: CalcState = { ...expected, [variable.name]: null };
 
-      const fillRuntime = new CalculatorRuntime(definition);
+      const fillRuntime = new CalculatorRuntime(definition, options.tables);
       fillRuntime.loadState(partial);
       verify(
         fillRuntime,
@@ -68,7 +77,7 @@ export function runCalculatorTests(
         failures,
       );
 
-      const solveRuntime = new CalculatorRuntime(definition);
+      const solveRuntime = new CalculatorRuntime(definition, options.tables);
       solveRuntime.loadState(partial);
       solveRuntime.calculate(variable.name);
       verify(
@@ -85,6 +94,17 @@ export function runCalculatorTests(
   }
 
   return failures;
+}
+
+/** True for any variable the runtime can derive from the rest of the state. */
+function isSolvable(variable: VariableDefinition): boolean {
+  if (isTableSelectVariable(variable)) {
+    return true;
+  }
+  return (
+    variable.computable !== undefined ||
+    variable.tableSelect !== undefined
+  );
 }
 
 /** Throws a detailed error when any calculator test check fails. */
@@ -154,9 +174,12 @@ function verify(
   }
 }
 
-function describeValue(value: number | null): string {
+function describeValue(value: CalcValue): string {
   if (value === null) {
     return 'no value';
+  }
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
   }
   return formatNumber(value);
 }

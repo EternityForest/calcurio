@@ -116,6 +116,64 @@ calc-app {
   width: auto;
 }
 
+.calc-table-select {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.calc-section-title {
+  font-size: 0.95rem;
+  margin: 1.25rem 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.75;
+}
+
+.calc-table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.calc-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.calc-table-grid {
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+  width: 100%;
+}
+
+.calc-table-grid th,
+.calc-table-grid td {
+  border-bottom: 1px solid var(--border-color);
+  padding: 0.35rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.calc-table-grid th {
+  font-size: 0.8rem;
+  position: sticky;
+  top: 0;
+  background: var(--box-bg);
+}
+
+.calc-table-grid td {
+  font-size: 0.9rem;
+}
+
+.calc-table-grid tbody tr:hover {
+  background: var(--alt-control-bg, #f4f4f4);
+}
+
+.calc-table-unit {
+  font-weight: 400;
+  opacity: 0.7;
+}
+
 .calc-calculate {
   flex: 0 0 auto;
 }

@@ -1,0 +1,35 @@
+{
+  "name": "calcurio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Embeddable calculator framework and static calculator app.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "deploy": "npm run build && gh-pages -d dist"
+  },
+  "dependencies": {
+    "barrel.css": "^1.0.1",
+    "convert-units": "3.0.0-beta.8",
+    "lit": "^3.3.3"
+  },
+  "devDependencies": {
+    "gh-pages": "^6.3.0",
+    "happy-dom": "^21.0.4",
+    "prettier": "^3.10.1",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  }
+}

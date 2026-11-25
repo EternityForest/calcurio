@@ -17,6 +17,16 @@ export const CATEGORY_MANIFEST = {
     description: 'Transient circuit simulations run in the browser.',
     load: () => import('./categories/spice/index.js'),
   },
+  fluids: {
+    title: 'Fluids',
+    description: 'Working-fluid properties and volume-to-weight.',
+    load: () => import('./categories/fluids/index.js'),
+  },
+  conversions: {
+    title: 'Conversions',
+    description: 'Everyday unit conversions between equivalent measures.',
+    load: () => import('./categories/conversions/index.js'),
+  },
 } as const satisfies CategoryManifest;
 
 export type App = CalculatorApp<typeof CATEGORY_MANIFEST>;

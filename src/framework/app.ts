@@ -4,6 +4,7 @@ import type {
   CategoryManifestEntry,
   CategoryModule,
   TableDefinition,
+  TableSource,
 } from './types.js';
 import { TableRegistry } from './tables.js';
 import { isValidIdentifier, validateCalculatorDefinition } from './validate.js';
@@ -60,7 +61,7 @@ export class CategoryHandle {
   }
 
   /** Registers a table that calculators in this category can reference. */
-  addTable(table: TableDefinition): TableDefinition {
+  addTable(table: TableSource): TableSource {
     return this.tableRegistry.add(table);
   }
 

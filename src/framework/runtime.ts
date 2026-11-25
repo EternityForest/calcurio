@@ -419,6 +419,7 @@ export class CalculatorRuntime {
     const baseValue =
       parsed === null ? null : convertUnit(parsed, displayUnit, variable.unit);
     this.prepareTableFieldEdit(name, baseValue);
+    this.prepareEquivalentEdit(name, baseValue);
     this.setValue(name, baseValue);
     return { ok: true };
   }
@@ -1143,6 +1144,38 @@ export class CalculatorRuntime {
       this.values[sibling.variable.name] = null;
       this.pinnedNames.delete(sibling.variable.name);
       this.missingNeeds.delete(sibling.variable.name);
+    }
+  }
+
+  /**
+   * A user edit of one equivalent variable makes the rest of its group stale.
+   * Clear and unpin the siblings so the edited value is the only known member
+   * and the others refill from it during the next recompute.
+   */
+  private prepareEquivalentEdit(name: string, value: number | null): void {
+    if (value === null) {
+      return;
+    }
+    const variable = this.variablesByName.get(name);
+    if (variable === undefined || isTableSelectVariable(variable)) {
+      return;
+    }
+    if (variable.equivalent === undefined) {
+      return;
+    }
+    const group = this.equivalentGroups.find((members) =>
+      members.includes(name),
+    );
+    if (group === undefined) {
+      return;
+    }
+    for (const member of group) {
+      if (member === name) {
+        continue;
+      }
+      this.values[member] = null;
+      this.pinnedNames.delete(member);
+      this.missingNeeds.delete(member);
     }
   }
 

@@ -79,6 +79,10 @@ export function validateCalculatorDefinition(
         solvableCount += 1;
       } else if (variable.computable !== undefined) {
         solvableCount += 1;
+      } else if (declaresEquivalents(variable)) {
+        // A variable joined to others by `equivalent` links is filled in from
+        // whichever member of its group already holds a value.
+        solvableCount += 1;
       }
       validateNumberVariable(where, variable, problems);
     }
@@ -312,6 +316,17 @@ function validateTableFieldReference(
       `${where}: tableSelect "${selectName}" is not a table-select variable.`,
     );
   }
+}
+
+/** True when a numeric variable declares at least one equivalent link. */
+function declaresEquivalents(variable: NumberVariableDefinition): boolean {
+  const equivalent = variable.equivalent;
+  return (
+    typeof equivalent === 'object' &&
+    equivalent !== null &&
+    !Array.isArray(equivalent) &&
+    Object.keys(equivalent).length > 0
+  );
 }
 
 /**

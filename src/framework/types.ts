@@ -152,6 +152,22 @@ export interface TableDefinition {
   readonly rows: readonly TableRow[];
 }
 
+/**
+ * A table that is built the first time it is requested. Categories register
+ * providers for large or programmatically generated tables (such as the
+ * E-series value lists) so they are not constructed until something needs
+ * them.
+ */
+export interface TableProvider {
+  /** Stable identifier the built table must also use. */
+  readonly id: string;
+  /** Builds the table. Called once, then the result is cached. */
+  build(): TableDefinition;
+}
+
+/** A table registered directly, or one that is built on first use. */
+export type TableSource = TableDefinition | TableProvider;
+
 /** Looks tables up by id for a calculator runtime. */
 export interface TableResolver {
   getTable(id: string): TableDefinition | undefined;
@@ -183,7 +199,7 @@ export interface CalculatorDefinition {
 
 /** Shape of a lazily imported category module. */
 export interface CategoryModule {
-  readonly tables?: readonly TableDefinition[];
+  readonly tables?: readonly TableSource[];
   readonly calculators: readonly CalculatorDefinition[];
 }
 

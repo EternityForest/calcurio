@@ -61,8 +61,27 @@ src/
     capacitor-types.ts  capacitor DC-bias table and C(V) law
   categories/basic/     one lazily loaded category
     ohms-law.ts         calculator definition (pure data)
+    voltage-divider.ts  two-resistor divider with E-series selection
+    low-pass-rlc.ts     low-pass RLC, RC, and LC filter
+    high-pass-rlc.ts    high-pass RLC, RC, and LC filter
+    inductor-impedance.ts       reactance of an inductor at a frequency
+    capacitor-impedance.ts      reactance of a capacitor at a frequency
     inductance-at-bias.ts       inductance of a part at a current
     capacitance-at-dc-bias.ts   capacitance of a part at a DC bias
+    e-series.ts         E3-E24 resistor and capacitor tables, built on demand
+    index.ts            category module entry
+  categories/fluids/    working-fluid properties and volume-to-weight
+    dippr-101.ts        DIPPR equation 101 correlation
+    fluids.ts           fluid property table
+    volume-and-weight.ts        volume and weight from a fluid's density
+    index.ts            category module entry
+  categories/conversions/   everyday conversions between equivalent units
+    equivalent-units.ts builds a set of mutually-equivalent variables
+    length.ts           centimetres, inches, feet
+    volume.ts           gallons, litres, cubic feet
+    temperature.ts      Celsius, Fahrenheit, kelvin
+    weight.ts           kilograms, pounds, ounces
+    speed.ts            km/h, mph, ft/s, m/s
     index.ts            category module entry
   categories/spice/     ngspice-backed transient simulations
     circuit.ts          netlist builder (pure data)
@@ -211,15 +230,17 @@ optional `dispose` runs at that point.
 
 ### Units
 
-Units come from `convert-units`; Calcurio adds `resistance` (`Ω`, `mΩ`,
-`kΩ`, `MΩ`), `inductance` (`H`, `mH`, `µH`, `nH`), `capacitance`
-(`F`, `mF`, `µF`, `nF`, `pF`) and `temperature` (`°C`, `K`, `°F`, `°R`)
-measures because the library does not ship them. The temperature measure
-spells the degrees out (`°C` rather than the library's bare `C`) and leaves
-`F` to the farad. The unit selector lists the variable's base unit followed
-by every unit of the same kind, or by `unitOptions` when it is provided.
-Typed values are converted from the selected display unit into the base unit,
-and displayed values are converted back out. A variable may set
+Units come from `convert-units`; Calcurio adds the measures the library
+does not ship: `resistance` (`Ω`, `mΩ`, `kΩ`, `MΩ`), `resistivity`,
+`inductance` (`H`, `mH`, `µH`, `nH`), `capacitance` (`F`, `mF`, `µF`, `nF`,
+`pF`), `temperature` (`°C`, `K`, `°F`, `°R`), `density` (`kg/m3`, `g/cm3`,
+…), `specificHeat`, `thermalConductivity`, `dynamicViscosity`,
+`thermalExpansion`, and a dimensionless `ratio` (`1`, `%`). The temperature
+measure spells the degrees out (`°C` rather than the library's bare `C`) and
+leaves `F` to the farad. The unit selector lists the variable's base unit
+followed by every unit of the same kind, or by `unitOptions` when it is
+provided. Typed values are converted from the selected display unit into the
+base unit, and displayed values are converted back out. A variable may set
 `defaultDisplayUnit` to open in a different unit of the same kind; the state
 is still stored in `unit`, so the capacitors store farads but start in
 microfarads.
@@ -262,6 +283,57 @@ The Basic category uses the models directly in two calculators, **Inductance
 at a current bias** and **Capacitance at a DC bias**, which the SPICE inrush
 transient then builds on.
 
+### Basic calculators
+
+Alongside Ohm's law and the component-bias models, the **Basic** category
+adds a two-resistor **Voltage divider** (type each resistance or pick one
+from the E-series tables; it reports the output voltage and a read-only
+divider ratio), **Low-pass** and **High-pass RLC filters** (set the
+inductance to zero to collapse to the RC case, or the resistance to zero for
+the undamped LC case; each reports the time constant and the -3 dB
+frequency), and **Inductor** and **Capacitor impedance** at a frequency
+(enter any two of frequency, component value, and impedance, then Calculate
+the third).
+
+### Fluids and DIPPR equation 101
+
+The **Fluids** category carries thermophysical data for common working
+fluids — water, air, nitrogen, mineral oil, ethylene glycol, neat propylene
+glycol, and propylene-glycol/water mixtures at 30 %, 40 %, and 50 %. The
+table stores each fluid's vapor-pressure and dynamic-viscosity coefficients
+for DIPPR equation 101, plus reference density, specific heat, thermal
+conductivity, and thermal expansion at 20 °C.
+
+DIPPR equation 101 is the standard five-parameter correlation
+
+    Y = exp(A + B/T + C·ln T + D·T^E)
+
+with the temperature in kelvin. `dippr-101.ts` implements it once, and the
+same function evaluates both property sets, so the vapor-pressure
+coefficients return pascals and the viscosity coefficients return pascal
+seconds. Vapor pressure and viscosity are only fitted for the pure
+substances, so the glycol mixtures and mineral oil leave those cells empty.
+
+The one calculator, **Volume and weight**, sets a fluid's density from the
+table; entering either a volume or a weight then gives the other.
+
+### Conversions
+
+The **Conversions** category turns the equivalent-variables idea into
+standalone calculators: length (centimetres, inches, feet), volume (gallons,
+litres, cubic feet), temperature (Celsius, Fahrenheit, kelvin), weight
+(kilograms, pounds, ounces), and speed (km/h, mph, ft/s, m/s). Each is a set
+of two or more variables that are all the same quantity, so entering any one
+fills the rest and there is nothing to solve for.
+
+`equivalent-units.ts` builds those variables from a list of units, wiring
+every pair together with a `convertUnit` conversion. Conversions go through
+the unit system rather than a hand-written factor, so the results agree
+exactly with the unit selectors and affine temperatures carry their offset.
+Because the variables are reflections rather than formulas, these calculators
+have no `computable` values and no test cases; their tests drive the runtime
+directly.
+
 ### Adding a category
 
 1. Create `src/categories/<id>/index.ts` exporting `{ calculators }` (and,
@@ -288,6 +360,14 @@ reference data for its calculators: a variable with a `table` field becomes a
 dropdown over that table's rows. Categories that need the same data export
 the same table (the Basic and SPICE categories both ship the inductor and
 capacitor model tables), so a shared model only needs defining once.
+
+A table can also be registered as a `TableProvider` — an object with an `id`
+and a `build()` method. The registry builds and validates the table the first
+time something requests it, then caches the result, so large or generated
+tables cost nothing until they are used. The Basic category's E-series
+resistor and capacitor tables are built this way: `e-series.ts` emits every
+E24 value across whole decades, each labelled with the smallest series the
+value belongs to, so 1.5 kΩ reads "1.5k(E6)" and 5.1 kΩ reads "5.1k(E24)".
 
 ### Testing calculator definitions
 

@@ -3,41 +3,53 @@ import type {
   TableCell,
   TableColumn,
   TableDefinition,
+  TableProvider,
   TableResolver,
   TableRow,
+  TableSource,
 } from './types.js';
 import { isValidIdentifier } from './validate.js';
 import { tryDescribeUnit } from './units.js';
 
 const COLUMN_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 
+/** Narrows a registration to an on-demand table provider. */
+function isTableProvider(source: TableSource): source is TableProvider {
+  return 'build' in source;
+}
+
 /**
  * In-memory collection of tables keyed by id. Categories own one registry so a
- * calculator can only resolve tables that were registered with it.
+ * calculator can only resolve tables that were registered with it. A table may
+ * be registered directly or as a provider that builds it on first use.
  */
 export class TableRegistry implements TableResolver {
   private readonly tables = new Map<string, TableDefinition>();
+  private readonly providers = new Map<string, TableProvider>();
 
-  constructor(tables: readonly TableDefinition[] = []) {
+  constructor(tables: readonly TableSource[] = []) {
     for (const table of tables) {
       this.add(table);
     }
   }
 
   get size(): number {
-    return this.tables.size;
+    return this.tables.size + this.providers.size;
   }
 
   get all(): readonly TableDefinition[] {
+    for (const id of [...this.providers.keys()]) {
+      this.materialize(id);
+    }
     return [...this.tables.values()];
   }
 
   getTable(id: string): TableDefinition | undefined {
-    return this.tables.get(id);
+    return this.materialize(id);
   }
 
   requireTable(id: string): TableDefinition {
-    const table = this.tables.get(id);
+    const table = this.getTable(id);
     if (table === undefined) {
       throw new TableDefinitionError(`Unknown table "${id}".`);
     }
@@ -45,21 +57,59 @@ export class TableRegistry implements TableResolver {
   }
 
   /**
-   * Registers a table. Registering the identical definition twice is a no-op,
-   * which makes lazy module loading safe to retry.
+   * Registers a table directly or as a provider built on first use.
+   * Registering the identical definition twice is a no-op, which makes lazy
+   * module loading safe to retry.
    */
-  add(table: TableDefinition): TableDefinition {
-    validateTableDefinition(table);
-    const existing = this.tables.get(table.id);
+  add(source: TableSource): TableSource {
+    const existing = this.tables.get(source.id) ?? this.providers.get(source.id);
     if (existing !== undefined) {
-      if (existing === table) {
+      if (existing === source) {
         return existing;
       }
       throw new TableDefinitionError(
-        `Table "${table.id}" is already registered.`,
+        `Table "${source.id}" is already registered.`,
       );
     }
-    this.tables.set(table.id, table);
+
+    if (isTableProvider(source)) {
+      if (!isValidIdentifier(source.id)) {
+        throw new TableDefinitionError(
+          `Table provider id "${source.id}" must use lowercase letters, ` +
+            'digits, and hyphens.',
+        );
+      }
+      this.providers.set(source.id, source);
+      return source;
+    }
+
+    validateTableDefinition(source);
+    this.tables.set(source.id, source);
+    return source;
+  }
+
+  /**
+   * Returns the table for an id, building and caching a provider on first use.
+   * The built table is validated, and its id must match the provider's.
+   */
+  private materialize(id: string): TableDefinition | undefined {
+    const cached = this.tables.get(id);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const provider = this.providers.get(id);
+    if (provider === undefined) {
+      return undefined;
+    }
+    const table = provider.build();
+    validateTableDefinition(table);
+    if (table.id !== provider.id) {
+      throw new TableDefinitionError(
+        `Table provider "${provider.id}" built a table with id "${table.id}".`,
+      );
+    }
+    this.providers.delete(id);
+    this.tables.set(id, table);
     return table;
   }
 }

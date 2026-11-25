@@ -26,6 +26,28 @@ export type CapacitanceUnit = 'F' | 'mF' | 'µF' | 'nF' | 'pF';
  */
 export type TemperatureUnit = '°C' | 'K' | '°F' | '°R';
 
+/** Units for the density measure, added because the library has none. */
+export type DensityUnit = 'kg/m3' | 'g/cm3' | 'g/mL' | 'kg/L' | 'lb/ft3';
+
+/** Units for the specific heat capacity measure. */
+export type SpecificHeatUnit =
+  | 'J/(kg·K)'
+  | 'kJ/(kg·K)'
+  | 'cal/(g·°C)'
+  | 'Btu/(lb·°F)';
+
+/** Units for the thermal conductivity measure. */
+export type ThermalConductivityUnit = 'W/(m·K)' | 'Btu/(h·ft·°F)';
+
+/** Units for the dynamic viscosity measure. */
+export type DynamicViscosityUnit = 'Pa·s' | 'mPa·s' | 'cP' | 'P';
+
+/** Units for the volumetric thermal expansion coefficient. */
+export type ThermalExpansionUnit = '1/K' | '1/°C' | '1/°F';
+
+/** Units for a dimensionless ratio. */
+export type RatioUnit = '1' | '%';
+
 /** Every unit a calculator variable may use. */
 export type UnitSymbol =
   | AllMeasuresUnits
@@ -33,11 +55,27 @@ export type UnitSymbol =
   | ResistivityUnit
   | InductanceUnit
   | CapacitanceUnit
-  | TemperatureUnit;
+  | TemperatureUnit
+  | DensityUnit
+  | SpecificHeatUnit
+  | ThermalConductivityUnit
+  | DynamicViscosityUnit
+  | ThermalExpansionUnit
+  | RatioUnit;
 
 /** Every measurement kind the unit registry understands. */
 export type MeasureName =
-  AllMeasures | 'resistance' | 'resistivity' | 'inductance' | 'capacitance';
+  | AllMeasures
+  | 'resistance'
+  | 'resistivity'
+  | 'inductance'
+  | 'capacitance'
+  | 'density'
+  | 'specificHeat'
+  | 'thermalConductivity'
+  | 'dynamicViscosity'
+  | 'thermalExpansion'
+  | 'ratio';
 
 type SystemName = AllMeasuresSystems;
 
@@ -197,6 +235,128 @@ const temperature: Measure<SystemName, TemperatureUnit> = {
   },
 };
 
+const density: Measure<SystemName, DensityUnit> = {
+  systems: {
+    SI: {
+      'kg/m3': {
+        name: { singular: 'Kilogram per cubic metre', plural: 'Kilograms per cubic metre' },
+        to_anchor: 1,
+      },
+      'g/cm3': {
+        name: { singular: 'Gram per cubic centimetre', plural: 'Grams per cubic centimetre' },
+        to_anchor: 1e3,
+      },
+      'g/mL': {
+        name: { singular: 'Gram per millilitre', plural: 'Grams per millilitre' },
+        to_anchor: 1e3,
+      },
+      'kg/L': {
+        name: { singular: 'Kilogram per litre', plural: 'Kilograms per litre' },
+        to_anchor: 1e3,
+      },
+      'lb/ft3': {
+        name: { singular: 'Pound per cubic foot', plural: 'Pounds per cubic foot' },
+        to_anchor: 16.018463373960142,
+      },
+    },
+  },
+};
+
+const specificHeat: Measure<SystemName, SpecificHeatUnit> = {
+  systems: {
+    SI: {
+      'J/(kg·K)': {
+        name: { singular: 'Joule per kilogram kelvin', plural: 'Joules per kilogram kelvin' },
+        to_anchor: 1,
+      },
+      'kJ/(kg·K)': {
+        name: { singular: 'Kilojoule per kilogram kelvin', plural: 'Kilojoules per kilogram kelvin' },
+        to_anchor: 1e3,
+      },
+      'cal/(g·°C)': {
+        name: { singular: 'Calorie per gram degree Celsius', plural: 'Calories per gram degree Celsius' },
+        to_anchor: 4184,
+      },
+      'Btu/(lb·°F)': {
+        name: { singular: 'British thermal unit per pound degree Fahrenheit', plural: 'British thermal units per pound degree Fahrenheit' },
+        to_anchor: 4186.8,
+      },
+    },
+  },
+};
+
+const thermalConductivity: Measure<SystemName, ThermalConductivityUnit> = {
+  systems: {
+    SI: {
+      'W/(m·K)': {
+        name: { singular: 'Watt per metre kelvin', plural: 'Watts per metre kelvin' },
+        to_anchor: 1,
+      },
+      'Btu/(h·ft·°F)': {
+        name: { singular: 'British thermal unit per hour foot degree Fahrenheit', plural: 'British thermal units per hour foot degree Fahrenheit' },
+        to_anchor: 1.730735,
+      },
+    },
+  },
+};
+
+const dynamicViscosity: Measure<SystemName, DynamicViscosityUnit> = {
+  systems: {
+    SI: {
+      'Pa·s': {
+        name: { singular: 'Pascal second', plural: 'Pascal seconds' },
+        to_anchor: 1,
+      },
+      'mPa·s': {
+        name: { singular: 'Millipascal second', plural: 'Millipascal seconds' },
+        to_anchor: 1e-3,
+      },
+      cP: {
+        name: { singular: 'Centipoise', plural: 'Centipoise' },
+        to_anchor: 1e-3,
+      },
+      P: {
+        name: { singular: 'Poise', plural: 'Poise' },
+        to_anchor: 0.1,
+      },
+    },
+  },
+};
+
+const thermalExpansion: Measure<SystemName, ThermalExpansionUnit> = {
+  systems: {
+    SI: {
+      '1/K': {
+        name: { singular: 'Per kelvin', plural: 'Per kelvin' },
+        to_anchor: 1,
+      },
+      '1/°C': {
+        name: { singular: 'Per degree Celsius', plural: 'Per degree Celsius' },
+        to_anchor: 1,
+      },
+      '1/°F': {
+        name: { singular: 'Per degree Fahrenheit', plural: 'Per degree Fahrenheit' },
+        to_anchor: 1.8,
+      },
+    },
+  },
+};
+
+const ratio: Measure<SystemName, RatioUnit> = {
+  systems: {
+    SI: {
+      '1': {
+        name: { singular: 'Ratio', plural: 'Ratio' },
+        to_anchor: 1,
+      },
+      '%': {
+        name: { singular: 'Percent', plural: 'Percent' },
+        to_anchor: 0.01,
+      },
+    },
+  },
+};
+
 const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   ...allMeasures,
   resistance,
@@ -204,6 +364,12 @@ const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   inductance,
   capacitance,
   temperature,
+  density,
+  specificHeat,
+  thermalConductivity,
+  dynamicViscosity,
+  thermalExpansion,
+  ratio,
 };
 
 const convert = configureMeasurements(measures);

@@ -4,6 +4,7 @@
  */
 
 import type { NgspiceModule, NgspiceModuleOptions } from '@o.z/ngspice-wasm';
+import { errorMessage } from '../../framework/errors.js';
 
 /** Creates a fresh ngspice module instance. */
 export type NgspiceFactory = (
@@ -31,7 +32,16 @@ export async function runNgspice(
   });
 
   module.FS.writeFile(INPUT_FILE, netlist);
-  invokeMain(module);
+  try {
+    invokeMain(module);
+  } catch (error) {
+    // A non-zero exit is a real ngspice failure (for example a convergence
+    // abort). The thrown value is usually an opaque `ExitStatus`, so fold in
+    // the simulator log, which holds the actual diagnostic.
+    throw new Error(
+      `The simulation failed: ${errorMessage(error)}${summarize(log)}`,
+    );
+  }
 
   try {
     return module.FS.readFile(OUTPUT_FILE) as Uint8Array;
@@ -68,12 +78,19 @@ function isCleanExit(error: unknown): boolean {
   return (error as { status?: unknown }).status === 0;
 }
 
-/** Adds the tail of the simulator log to a failure message. */
+/** Per-run noise ngspice prints regardless of success or failure. */
+const LOG_NOISE =
+  /fopen\("[^"]*"\): No such file or directory|Total DRAM available = \d+ bytes\.|DRAM currently available = \d+ bytes\.|Maximum ngspice program size = \d+ bytes\.|Current ngspice program size = \d+ bytes\.|Shared ngspice pages = \d+ bytes\.|Text \(code\) pages = \d+ bytes\.|Stack = \d+ bytes\.|Library pages = \d+ bytes\./g;
+
+/** Adds the diagnostic from the simulator log to a failure message. */
 function summarize(log: readonly string[]): string {
-  const text = log.join('').trim();
+  const text = log.join('').replace(LOG_NOISE, ' ').replace(/\s+/g, ' ').trim();
   if (text === '') {
     return '';
   }
-  const lines = text.split('\n').slice(-4);
-  return `\n${lines.join('\n')}`;
+  const diagnostic = text.match(
+    /doAnalyses:.*?(?:aborted|timestep|singular|no convergence)[^]*?(?=Total analysis time|Total elapsed time|$)/i,
+  );
+  const detail = (diagnostic?.[0] ?? text).trim().slice(-500);
+  return `\n${detail}`;
 }

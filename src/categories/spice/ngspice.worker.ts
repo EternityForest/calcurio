@@ -41,6 +41,9 @@ async function handle(request: SimulationRequest): Promise<void> {
       buffers,
     );
   } catch (error) {
+    // Surfaced as a displayable message, but the raw value (often a non-Error
+    // object from WebAssembly) is only useful in devtools.
+    console.error('ngspice worker failed:', error);
     scope.postMessage({ ok: false, error: errorMessage(error) });
   }
 }

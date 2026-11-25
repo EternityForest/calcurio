@@ -49,11 +49,36 @@ export class NumberFormatError extends Error {
 }
 
 /**
- * Converts any thrown value into a message suitable for display.
+ * Converts any thrown value into a message suitable for display. Thrown values
+ * are not always `Error`s: WebAssembly and Emscripten reject with plain objects
+ * such as `ExitStatus`, and `String(value)` would flatten those to the useless
+ * `"[object Object]"`. Prefer a readable `name`/`message`, then JSON, and only
+ * fall back to `String` for primitives.
  */
 export function errorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
   }
+  if (typeof error === 'object' && error !== null) {
+    const record = error as { name?: unknown; message?: unknown };
+    const message = typeof record.message === 'string' ? record.message : '';
+    const name = typeof record.name === 'string' ? record.name : '';
+    if (message !== '') {
+      return name !== '' && name !== 'Error' ? `${name}: ${message}` : message;
+    }
+    const json = stringify(error);
+    if (json !== undefined && json !== '{}') {
+      return json;
+    }
+  }
   return String(error);
+}
+
+/** JSON for a value, or undefined when it cannot be serialized (circular). */
+function stringify(value: object): string | undefined {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return undefined;
+  }
 }

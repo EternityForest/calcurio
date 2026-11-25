@@ -5,7 +5,8 @@ import { BookmarkStore } from '../bookmarks.js';
 import type { KeyValueStorage } from '../bookmarks.js';
 import { missing } from '../missing.js';
 import { CalculatorRuntime } from '../runtime.js';
-import type { CalculatorDefinition } from '../types.js';
+import { TableRegistry } from '../tables.js';
+import type { CalculatorDefinition, TableDefinition } from '../types.js';
 import { unchanged } from '../unchanged.js';
 import { CalculatorView } from './calculator-view.js';
 import { BookmarksDialog } from './bookmarks-dialog.js';
@@ -213,6 +214,23 @@ function computeStateDefinition(
   };
 }
 
+function sampleTable(): TableDefinition {
+  return {
+    id: 'materials',
+    title: 'Materials',
+    keyColumn: 'id',
+    labelColumn: 'name',
+    columns: [
+      { key: 'id', label: 'Id', kind: 'text' },
+      { key: 'name', label: 'Name', kind: 'text' },
+    ],
+    rows: [
+      { id: 'air', name: 'Air' },
+      { id: 'iron', name: 'Iron' },
+    ],
+  };
+}
+
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res) => {
@@ -221,7 +239,10 @@ function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   return { promise, resolve };
 }
 
-function requireButton(view: CalculatorView, testId: string): HTMLButtonElement {
+function requireButton(
+  view: CalculatorView,
+  testId: string,
+): HTMLButtonElement {
   const button = view.querySelector<HTMLButtonElement>(
     `[data-testid="${testId}"]`,
   );
@@ -246,12 +267,51 @@ describe('CalculatorView computeState', () => {
   });
 
   it('hides calculate and plot controls in computeState mode', async () => {
-    const view = await mount(readyRuntime((state) => ({ ...state })), null);
+    const view = await mount(
+      readyRuntime((state) => ({ ...state })),
+      null,
+    );
     expect(view.querySelectorAll('calc-variable-field')).toHaveLength(3);
     expect(view.querySelector('[data-testid="plot-a"]')).toBeNull();
     expect(view.querySelector('[data-testid="calculate-a"]')).toBeNull();
     expect(view.querySelector('[data-testid="run"]')).not.toBeNull();
     expect(requireButton(view, 'cancel').disabled).toBe(true);
+  });
+
+  it('keeps a table select editable in computeState mode', async () => {
+    const runtime = new CalculatorRuntime(
+      {
+        id: 'compute-state-select',
+        title: 'Compute state select',
+        variables: [
+          { name: 'a', label: 'A', unit: 'V' },
+          { name: 'material', label: 'Material', table: 'materials' },
+          {
+            name: 'sum',
+            label: 'Sum',
+            unit: 'V',
+            computable: () => unchanged(),
+          },
+        ],
+        computeState: (state) => ({ ...state }),
+      },
+      new TableRegistry([sampleTable()]),
+    );
+
+    const view = await mount(runtime, null);
+    const select = view.querySelector<HTMLSelectElement>(
+      '[data-testid="value-material"]',
+    );
+    if (select === null) {
+      throw new Error('The material select was not rendered.');
+    }
+    expect(select.disabled).toBe(false);
+    // Placeholder plus the two rows.
+    expect(select.options).toHaveLength(3);
+
+    select.value = 'iron';
+    select.dispatchEvent(new Event('change'));
+    expect(runtime.selectedKey('material')).toBe('iron');
   });
 
   it('runs computeState from the Run button and merges the result', async () => {

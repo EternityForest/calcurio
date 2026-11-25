@@ -140,7 +140,10 @@ export class CalculatorView extends LitElement {
   ): TemplateResult {
     const name = variable.name;
     const runMode = runtime.hasComputeState;
-    const output = runMode && runtime.isComputable(name);
+    // In run mode the derived numbers are results, but a table select stays a
+    // live choice: the runtime derives it too, so it must not be disabled.
+    const output =
+      runMode && runtime.isComputable(name) && !isTableSelectVariable(variable);
     const base = {
       name,
       label: variable.label,

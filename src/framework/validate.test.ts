@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CalculatorDefinitionError } from './errors.js';
-import type { CalculatorDefinition } from './types.js';
+import type { CalculatorDefinition,NumberVariableDefinition } from './types.js';
 import { isTableSelectVariable } from './types.js';
 import type { UnitSymbol } from './units.js';
 import { unchanged } from './unchanged.js';
@@ -308,7 +308,7 @@ describe('validateCalculatorDefinition', () => {
         ...definition,
         variables: [
           definition.variables[0]!,
-          { ...definition.variables[1]!, default: 5 },
+          { ...definition.variables[1]!, default: 5 } as NumberVariableDefinition,
         ],
       }),
     ).not.toThrow();
@@ -320,7 +320,7 @@ describe('validateCalculatorDefinition', () => {
       validateCalculatorDefinition({
         ...definition,
         variables: [
-          { ...definition.variables[0]!, default: 5 },
+          { ...definition.variables[0]!, default: 5 } as NumberVariableDefinition,
           definition.variables[1]!,
         ],
       }),
@@ -334,7 +334,7 @@ describe('validateCalculatorDefinition', () => {
         ...definition,
         variables: [
           definition.variables[0]!,
-          { ...definition.variables[1]!, default: Number.NaN },
+          { ...definition.variables[1]!, default: Number.NaN } as NumberVariableDefinition,
         ],
       }),
     ).toThrow(CalculatorDefinitionError);

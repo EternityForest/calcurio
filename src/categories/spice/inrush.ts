@@ -193,6 +193,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'sourceVoltage',
       label: 'Source voltage',
       unit: 'V',
+      default: 5.5,
       description: 'Voltage switched onto the circuit at the start.',
       validate: aboveZero('sourceVoltage', 'Enter a voltage above zero.'),
     },
@@ -200,6 +201,8 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'seriesInductance',
       label: 'Series inductance',
       unit: 'H',
+      defaultDisplayUnit: 'µH',
+      default: 2e-6,
       description:
         'Inductance between the supply and the capacitors, at zero current.',
       validate: aboveZero(
@@ -211,6 +214,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'inductorType',
       label: 'Inductor type',
       table: 'inductor-types',
+      default:'air',
       description:
         'Material and construction class, which sets the saturation shape.',
     },
@@ -218,6 +222,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'saturationCurrent',
       label: 'Rated saturation current',
       unit: 'A',
+      default: 5,
       description:
         'Current at which the inductor reaches its saturation drop, quoted ' +
         'at 25 °C. Ignored by materials that do not saturate.',
@@ -230,6 +235,8 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'seriesResistance',
       label: 'Series resistance',
       unit: 'Ω',
+      defaultDisplayUnit: "mΩ",
+      default: 0.010,
       description: 'Resistance in series with the inductance.',
       validate: aboveZero(
         'seriesResistance',
@@ -241,6 +248,7 @@ export const inrushTransient: CalculatorDefinition = {
       label: 'Capacitance 1',
       unit: 'F',
       defaultDisplayUnit: 'µF',
+      default: 10e-6,
       description: 'Capacitor directly across the load, at zero bias.',
       validate: aboveZero(
         'capacitance1',
@@ -251,12 +259,14 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitor1Type',
       label: 'Capacitor 1 type',
       table: 'capacitor-types',
+      default: "x5r-0402",
       description: 'Dielectric and package of the load capacitor.',
     },
     {
       name: 'capacitor1VoltageRating',
       label: 'Capacitor 1 voltage rating',
       unit: 'V',
+      default: 25,
       description:
         'Working voltage of the load capacitor. Caps the knee voltage of ' +
         'the DC-bias model; not used by linear types.',
@@ -269,6 +279,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'dampingResistance',
       label: 'Damping resistance',
       unit: 'Ω',
+      default: 5,
       description: 'Resistance in series with the second capacitor.',
       validate: aboveZero(
         'dampingResistance',
@@ -280,6 +291,7 @@ export const inrushTransient: CalculatorDefinition = {
       label: 'Capacitance 2',
       unit: 'F',
       defaultDisplayUnit: 'µF',
+      default: 10e-6,
       description: 'Capacitor behind the damping resistance, at zero bias.',
       validate: aboveZero(
         'capacitance2',
@@ -290,12 +302,14 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitor2Type',
       label: 'Capacitor 2 type',
       table: 'capacitor-types',
+      default: "x5r-0402",
       description: 'Dielectric and package of the second capacitor.',
     },
     {
       name: 'capacitor2VoltageRating',
       label: 'Capacitor 2 voltage rating',
       unit: 'V',
+      default: 25,
       description:
         'Working voltage of the second capacitor. Ignored by linear types.',
       validate: aboveZero(

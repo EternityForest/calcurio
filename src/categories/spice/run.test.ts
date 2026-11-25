@@ -138,4 +138,36 @@ describe('runNgspice', () => {
       expect(Number.isFinite(current[index]!)).toBe(true);
     }
   }, 120_000);
+
+  it('reports the simulator diagnostic when ngspice aborts', async () => {
+    // A behavioural inductor in a stiff linear LC circuit makes ngspice abort
+    // with "TRAN: Timestep too small", which surfaces as a non-zero exit. The
+    // thrown value is an opaque object, so the message must carry the log.
+    const stiff = [
+      '* stiff behavioural inductor',
+      'V1 1 0 400',
+      'VsenseL 1 2 0',
+      'BL 2 3 V = (100e-6) * ddt(i(VsenseL))',
+      'R1 3 4 0.001',
+      'C1 4 0 470u',
+      '.save v(4) i(vsensel)',
+      '.tran 100n 100m 0 100n uic',
+      '.end',
+      '',
+    ].join('\n');
+
+    let failure: unknown;
+    try {
+      await runNgspice(stiff, createNgspiceModule);
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    const message = (failure as Error).message;
+    expect(message).toContain('The simulation failed');
+    expect(message).toContain('ExitStatus');
+    expect(message).toContain('Timestep too small');
+    expect(message).not.toContain('[object Object]');
+  }, 120_000);
 });

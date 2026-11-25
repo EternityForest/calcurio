@@ -17,6 +17,7 @@ export interface VariableBase {
   readonly label: string;
   /** Whether the user may type or select a value. Defaults to true. */
   readonly editable?: boolean;
+
   /**
    * Whether a change to this value should start another round of
    * recomputation. Defaults to true. Set to false for derived values that
@@ -77,6 +78,8 @@ export interface NumberVariableDefinition extends VariableBase {
 export interface TableSelectVariableDefinition extends VariableBase {
   /** ID of the table whose rows this variable selects. */
   readonly table: string;
+
+  readonly default?: string;
 }
 
 /** One value in a calculator: numeric, or a table row selection. */

@@ -9,7 +9,8 @@ import type {
   TableSource,
 } from './types.js';
 import { isValidIdentifier } from './validate.js';
-import { tryDescribeUnit } from './units.js';
+import { parseCompositeUnit, tryDescribeUnit } from './units.js';
+import { parseLookupCell } from './interpolate.js';
 
 const COLUMN_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 
@@ -150,15 +151,33 @@ export function validateTableDefinition(table: TableDefinition): void {
       column.kind !== undefined &&
       column.kind !== 'text' &&
       column.kind !== 'number' &&
-      column.kind !== 'boolean'
+      column.kind !== 'boolean' &&
+      column.kind !== 'lookup'
     ) {
       problems.push(`${where}: unknown kind "${column.kind}".`);
     }
-    if (column.unit !== undefined && tryDescribeUnit(column.unit) === null) {
-      problems.push(`${where}: unknown unit "${column.unit}".`);
+    if (column.unit !== undefined) {
+      if (parseCompositeUnit(column.unit) === null) {
+        if (tryDescribeUnit(column.unit) === null) {
+          problems.push(`${where}: unknown unit "${column.unit}".`);
+        }
+      }
     }
     if (column.unit !== undefined && column.kind !== undefined) {
-      if (column.kind !== 'number') {
+      if (column.kind === 'number') {
+        if (parseCompositeUnit(column.unit) !== null) {
+          problems.push(
+            `${where}: a number column must not have a composite unit.`,
+          );
+        }
+      } else if (column.kind === 'lookup') {
+        if (parseCompositeUnit(column.unit) === null) {
+          problems.push(
+            `${where}: a lookup column must have a composite unit such as ` +
+              '"kg/m3@°C".',
+          );
+        }
+      } else {
         problems.push(
           `${where}: a ${column.kind} column must not have a unit.`,
         );
@@ -218,6 +237,17 @@ export function validateTableDefinition(table: TableDefinition): void {
             `${where}: boolean column "${column.key}" must be true or false.`,
           );
         }
+      } else if (isLookupColumn(column)) {
+        if (typeof value !== 'string') {
+          problems.push(
+            `${where}: lookup column "${column.key}" must be text.`,
+          );
+        } else if (parseLookupCell(value) === null) {
+          problems.push(
+            `${where}: lookup column "${column.key}" must hold pairs such as ` +
+              '"100@25; 39@844".',
+          );
+        }
       } else if (isTextColumn(column)) {
         if (typeof value !== 'string') {
           problems.push(`${where}: text column "${column.key}" must be text.`);
@@ -258,6 +288,11 @@ export function isBooleanColumn(column: TableColumn): boolean {
   return column.kind === 'boolean';
 }
 
+/** True for columns that store sampled lookup pairs. */
+export function isLookupColumn(column: TableColumn): boolean {
+  return column.kind === 'lookup';
+}
+
 /** Finds a column by key, or returns undefined. */
 export function findColumn(
   table: TableDefinition,
@@ -287,6 +322,22 @@ export function findRow(
   key: string,
 ): TableRow | undefined {
   return table.rows.find((row) => rowKey(table, row) === key);
+}
+
+/**
+ * True when a row has a value in the column named by a table-select filter.
+ * A null, undefined, or empty cell means the property is not set, so the row
+ * is hidden from selectors that require it.
+ */
+export function rowMatchesFilter(
+  row: TableRow,
+  filter: string | undefined,
+): boolean {
+  if (filter === undefined) {
+    return true;
+  }
+  const value = row[filter];
+  return value !== null && value !== undefined && value !== '';
 }
 
 /** Narrows an unknown table cell to a finite number. */

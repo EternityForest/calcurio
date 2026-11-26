@@ -83,6 +83,11 @@ export interface NumberVariableDefinition extends VariableBase {
   /** Column in that table. Requires `tableSelect`. */
   readonly tableField?: string;
   /**
+   * Name of the numeric variable that supplies the axis value for a lookup
+   * column. The column's unit must be a composite unit such as `kg/m3@°C`.
+   */
+  readonly tableAxis?: string;
+  /**
    * Other numeric variables that hold the same quantity in a different form,
    * each mapped to a function that converts this variable's value into that
    * one. Declared in both directions (`area` names `diameter` and `diameter`
@@ -105,6 +110,11 @@ export interface NumberVariableDefinition extends VariableBase {
 export interface TableSelectVariableDefinition extends VariableBase {
   /** ID of the table whose rows this variable selects. */
   readonly table: string;
+  /**
+   * Column key that must have a non-null value for a row to appear in the
+   * selector. Use it to hide rows that lack a property the calculator needs.
+   */
+  readonly filter?: string;
 
   readonly default?: string;
 }
@@ -167,7 +177,15 @@ export type TableCell = string | number | boolean | null;
 export type TableRow = Readonly<Record<string, TableCell>>;
 
 /** How a table column stores its cells when it has no unit to imply one. */
-export type TableColumnKind = 'text' | 'number' | 'boolean';
+export type TableColumnKind = 'text' | 'number' | 'boolean' | 'lookup';
+
+/**
+ * A unit paired with the axis it varies along, written as `unit@axis` such as
+ * `kg/m3@°C`. A lookup column stores sampled pairs in this unit and
+ * interpolates against the axis. A plain string is accepted so tables can write
+ * the composite unit directly; `parseCompositeUnit` validates it at runtime.
+ */
+export type CompositeUnit = string & { readonly __compositeUnit?: never };
 
 /**
  * One column in a table. A column is numeric when it has a unit or declares
@@ -177,11 +195,15 @@ export type TableColumnKind = 'text' | 'number' | 'boolean';
 export interface TableColumn {
   readonly key: string;
   readonly label: string;
-  /** Numeric columns store values in this unit. Omit for text columns. */
-  readonly unit?: UnitSymbol;
+  /**
+   * Numeric columns store values in this unit. Omit for text columns. A
+   * lookup column uses a composite unit such as `kg/m3@°C`.
+   */
+  readonly unit?: UnitSymbol | CompositeUnit;
   /**
    * Overrides the cell type implied by `unit`. Use "number" for dimensionless
-   * numeric columns and "boolean" for yes/no flags.
+   * numeric columns and "boolean" for yes/no flags. A "lookup" column stores
+   * text cells such as `100@25; 39@844`.
    */
   readonly kind?: TableColumnKind;
   readonly description?: string;

@@ -13,11 +13,14 @@ import type {
 import {
   findColumn,
   findRow,
+  isLookupColumn,
   isNumericColumn,
   numericCell,
   rowKey,
   rowLabel,
+  rowMatchesFilter,
 } from './tables.js';
+import { interpolateAt, parseLookupCell } from './interpolate.js';
 import type {
   CalcState,
   CalcValue,
@@ -41,7 +44,13 @@ import {
   isTextVariable,
 } from './types.js';
 import { isUnchanged } from './unchanged.js';
-import { choicesForUnit, convertUnit, measureOf } from './units.js';
+import {
+  choicesForUnit,
+  convertUnit,
+  isUnitSymbol,
+  measureOf,
+  parseCompositeUnit,
+} from './units.js';
 import type { UnitSymbol } from './units.js';
 import {
   validateCalculatorDefinition,
@@ -104,6 +113,14 @@ interface TableFieldBinding {
   readonly column: TableColumn;
   readonly columnUnit: UnitSymbol;
   readonly selectName: string;
+  /**
+   * Axis metadata for a lookup column. The axis variable supplies the value
+   * that is interpolated against the column's sampled pairs.
+   */
+  readonly lookup?: {
+    readonly axisVariable: string;
+    readonly axisUnit: UnitSymbol;
+  };
 }
 
 /**
@@ -368,6 +385,9 @@ export class CalculatorRuntime {
       if (key === null) {
         continue;
       }
+      if (!rowMatchesFilter(row, binding.variable.filter)) {
+        continue;
+      }
       choices.push({ key, label: rowLabel(binding.table, row) });
     }
     return choices;
@@ -550,11 +570,16 @@ export class CalculatorRuntime {
       throw new Error(`${binding.variable.label} is read-only.`);
     }
     const normalized = key === '' ? null : key;
-    const rowMissing =
-      normalized !== null && findRow(binding.table, normalized) === undefined;
-    if (rowMissing) {
+    const row = normalized === null ? undefined : findRow(binding.table, normalized);
+    if (normalized !== null && row === undefined) {
       throw new RangeError(
         `Row "${normalized}" is not in table "${binding.table.id}".`,
+      );
+    }
+    if (row !== undefined && !rowMatchesFilter(row, binding.variable.filter)) {
+      throw new RangeError(
+        `Row "${normalized}" is hidden because "${binding.variable.filter}" ` +
+          'is not set.',
       );
     }
 
@@ -864,6 +889,15 @@ export class CalculatorRuntime {
         continue;
       }
       const table = this.resolveTable(variable, tables);
+      if (variable.filter !== undefined) {
+        const filterColumn = findColumn(table, variable.filter);
+        if (filterColumn === undefined) {
+          throw new CalculatorDefinitionError(
+            `${variable.label} filters on unknown column ` +
+              `"${variable.filter}" in table "${table.id}".`,
+          );
+        }
+      }
       this.tableSelects.set(variable.name, { variable, table });
     }
 
@@ -891,10 +925,81 @@ export class CalculatorRuntime {
             `table "${select.table.id}".`,
         );
       }
+
+      if (isLookupColumn(column)) {
+        const composite =
+          column.unit === undefined ? null : parseCompositeUnit(column.unit);
+        if (composite === null) {
+          throw new CalculatorDefinitionError(
+            `${variable.label} references lookup column "${fieldKey}" ` +
+              'without a composite unit such as "kg/m3@°C".',
+          );
+        }
+        const axisName = variable.tableAxis;
+        if (axisName === undefined) {
+          throw new CalculatorDefinitionError(
+            `${variable.label} references lookup column "${fieldKey}" but ` +
+              'does not name a tableAxis.',
+          );
+        }
+        const axisVariable = this.variablesByName.get(axisName);
+        if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
+          throw new CalculatorDefinitionError(
+            `${variable.label} names unknown numeric tableAxis "${axisName}".`,
+          );
+        }
+        if (measureOf(axisVariable.unit) !== measureOf(composite.axis)) {
+          throw new CalculatorDefinitionError(
+            `${variable.label} axis "${axisName}" uses ` +
+              `"${axisVariable.unit}" but column "${fieldKey}" expects ` +
+              `"${composite.axis}".`,
+          );
+        }
+        if (measureOf(composite.unit) !== measureOf(variable.unit)) {
+          throw new CalculatorDefinitionError(
+            `${variable.label} uses "${variable.unit}" but column ` +
+              `"${fieldKey}" uses "${composite.unit}".`,
+          );
+        }
+
+        const binding: TableFieldBinding = {
+          variable,
+          table: select.table,
+          column,
+          columnUnit: composite.unit,
+          selectName,
+          lookup: { axisVariable: axisName, axisUnit: composite.axis },
+        };
+        this.tableFields.set(variable.name, binding);
+        const siblings = this.tableFieldsBySelect.get(selectName) ?? [];
+        siblings.push(binding);
+        this.tableFieldsBySelect.set(selectName, siblings);
+        continue;
+      }
+
+      if (variable.tableAxis !== undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} declares tableAxis but column "${fieldKey}" ` +
+            'is not a lookup column.',
+        );
+      }
+      const composite = parseCompositeUnit(column.unit as string);
+      if (composite !== null) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} references column "${fieldKey}" with a composite ` +
+            'unit but its kind is not "lookup".',
+        );
+      }
       if (!isNumericColumn(column) || column.unit === undefined) {
         throw new CalculatorDefinitionError(
           `${variable.label} must reference a numeric column; ` +
             `"${fieldKey}" is text.`,
+        );
+      }
+      if (!isUnitSymbol(column.unit)) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} references column "${fieldKey}" with an unknown ` +
+            'unit.',
         );
       }
       if (measureOf(column.unit) !== measureOf(variable.unit)) {
@@ -938,7 +1043,11 @@ export class CalculatorRuntime {
         continue;
       }
       const binding = this.tableSelects.get(variable.name);
-      if (binding === undefined || findRow(binding.table, key) === undefined) {
+      if (binding === undefined) {
+        continue;
+      }
+      const row = findRow(binding.table, key);
+      if (row === undefined || !rowMatchesFilter(row, variable.filter)) {
         continue;
       }
       this.values[variable.name] = key;
@@ -1269,6 +1378,7 @@ export class CalculatorRuntime {
     const constraints = (
       this.tableFieldsBySelect.get(binding.variable.name) ?? []
     )
+      .filter((field) => field.lookup === undefined)
       .map((field) => ({
         field,
         value: this.values[field.variable.name],
@@ -1281,8 +1391,11 @@ export class CalculatorRuntime {
       return null;
     }
 
-    const matches = binding.table.rows.filter((row) =>
-      constraints.every(({ field, value }) => {
+    const matches = binding.table.rows.filter((row) => {
+      if (!rowMatchesFilter(row, binding.variable.filter)) {
+        return false;
+      }
+      return constraints.every(({ field, value }) => {
         const cell = numericCell(row[field.column.key]);
         if (cell === null) {
           return false;
@@ -1293,8 +1406,8 @@ export class CalculatorRuntime {
           field.columnUnit,
         );
         return nearlyEqual(cell, converted);
-      }),
-    );
+      });
+    });
     if (matches.length !== 1) {
       return null;
     }
@@ -1318,6 +1431,43 @@ export class CalculatorRuntime {
       );
       return null;
     }
+
+    if (binding.lookup !== undefined) {
+      const axisVariable = this.variablesByName.get(binding.lookup.axisVariable);
+      if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
+        return null;
+      }
+      const axisValue = this.values[binding.lookup.axisVariable];
+      if (typeof axisValue !== 'number' || !Number.isFinite(axisValue)) {
+        return null;
+      }
+      const text = row[binding.column.key];
+      if (typeof text !== 'string' || text.trim() === '') {
+        this.addError(`${binding.column.label} is empty for row "${key}".`);
+        return null;
+      }
+      const points = parseLookupCell(text);
+      if (points === null) {
+        this.addError(
+          `${binding.column.label} is malformed for row "${key}".`,
+        );
+        return null;
+      }
+      const axis = convertUnit(
+        axisValue,
+        axisVariable.unit,
+        binding.lookup.axisUnit,
+      );
+      const sampled = interpolateAt(points, axis);
+      if (sampled === null) {
+        this.addError(
+          `${binding.column.label} cannot be interpolated for row "${key}".`,
+        );
+        return null;
+      }
+      return convertUnit(sampled, binding.columnUnit, binding.variable.unit);
+    }
+
     const cell = numericCell(row[binding.column.key]);
     if (cell === null) {
       this.addError(`${binding.column.label} is empty for row "${key}".`);
@@ -1632,13 +1782,20 @@ export class CalculatorRuntime {
       }
       if (isTableSelectVariable(variable)) {
         const binding = this.tableSelects.get(variable.name);
-        if (
-          typeof value !== 'string' ||
-          binding === undefined ||
-          findRow(binding.table, value) === undefined
-        ) {
+        if (typeof value !== 'string' || binding === undefined) {
           throw new StateLoadError(
             `Saved value for "${variable.name}" is not a valid table row.`,
+          );
+        }
+        const row = findRow(binding.table, value);
+        if (row === undefined) {
+          throw new StateLoadError(
+            `Saved value for "${variable.name}" is not a valid table row.`,
+          );
+        }
+        if (!rowMatchesFilter(row, variable.filter)) {
+          throw new StateLoadError(
+            `Saved value for "${variable.name}" is a row hidden by the filter.`,
           );
         }
         continue;

@@ -506,6 +506,12 @@ function validateTableSelect(
   ) {
     problems.push(`${where}: default must be a non-empty row key.`);
   }
+  if (
+    variable.filter !== undefined &&
+    (typeof variable.filter !== 'string' || variable.filter.trim() === '')
+  ) {
+    problems.push(`${where}: filter must be a non-empty column key.`);
+  }
   if ('unit' in variable) {
     problems.push(`${where}: a table-select variable must not have a unit.`);
   }
@@ -584,6 +590,15 @@ function validateNumberVariable(
   }
   if (hasField && variable.tableField === '') {
     problems.push(`${where}: tableField must not be empty.`);
+  }
+  if (
+    variable.tableAxis !== undefined &&
+    (typeof variable.tableAxis !== 'string' || variable.tableAxis === '')
+  ) {
+    problems.push(`${where}: tableAxis must be a non-empty variable name.`);
+  }
+  if (variable.tableAxis !== undefined && !hasField) {
+    problems.push(`${where}: tableAxis requires tableField.`);
   }
   if (hasSelect && variable.computable !== undefined) {
     problems.push(

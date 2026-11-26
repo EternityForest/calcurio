@@ -65,7 +65,7 @@ export function runCalculatorTests(
     }
 
     for (const variable of definition.variables) {
-      if (!isSolvable(variable)) {
+      if (!isSolvable(variable, definition)) {
         continue;
       }
       const partial: CalcState = { ...expected, [variable.name]: null };
@@ -103,12 +103,23 @@ export function runCalculatorTests(
 }
 
 /** True for any variable the runtime can derive from the rest of the state. */
-function isSolvable(variable: VariableDefinition): boolean {
+function isSolvable(
+  variable: VariableDefinition,
+  definition: CalculatorDefinition,
+): boolean {
   if (variable.takeFrom !== undefined) {
     return true;
   }
   if (isTableSelectVariable(variable)) {
-    return true;
+    // A table select only has a row to find when a plain table field reads it.
+    // Lookup fields are excluded from row matching, so they cannot supply the
+    // row on their own.
+    return definition.variables.some(
+      (other) =>
+        isNumberVariable(other) &&
+        other.tableSelect === variable.name &&
+        other.tableAxis === undefined,
+    );
   }
   if (variable.computable !== undefined) {
     return true;

@@ -33,6 +33,9 @@ export type DensityUnit = 'kg/m3' | 'g/cm3' | 'g/mL' | 'kg/L' | 'lb/ft3';
 export type SpecificHeatUnit =
   'J/(kg·K)' | 'kJ/(kg·K)' | 'cal/(g·°C)' | 'Btu/(lb·°F)';
 
+/** Units for latent heat and other specific energies. */
+export type SpecificEnergyUnit = 'J/kg' | 'kJ/kg' | 'cal/g' | 'Btu/lb';
+
 /** Units for the thermal conductivity measure. */
 export type ThermalConductivityUnit = 'W/(m·K)' | 'Btu/(h·ft·°F)';
 
@@ -63,6 +66,7 @@ export type UnitSymbol =
   | TemperatureUnit
   | DensityUnit
   | SpecificHeatUnit
+  | SpecificEnergyUnit
   | ThermalConductivityUnit
   | DynamicViscosityUnit
   | ThermalExpansionUnit
@@ -78,6 +82,7 @@ export type MeasureName =
   | 'capacitance'
   | 'density'
   | 'specificHeat'
+  | 'specificEnergy'
   | 'thermalConductivity'
   | 'dynamicViscosity'
   | 'thermalExpansion'
@@ -316,6 +321,35 @@ const specificHeat: Measure<SystemName, SpecificHeatUnit> = {
   },
 };
 
+const specificEnergy: Measure<SystemName, SpecificEnergyUnit> = {
+  systems: {
+    SI: {
+      'J/kg': {
+        name: { singular: 'Joule per kilogram', plural: 'Joules per kilogram' },
+        to_anchor: 1,
+      },
+      'kJ/kg': {
+        name: {
+          singular: 'Kilojoule per kilogram',
+          plural: 'Kilojoules per kilogram',
+        },
+        to_anchor: 1e3,
+      },
+      'cal/g': {
+        name: { singular: 'Calorie per gram', plural: 'Calories per gram' },
+        to_anchor: 4184,
+      },
+      'Btu/lb': {
+        name: {
+          singular: 'British thermal unit per pound',
+          plural: 'British thermal units per pound',
+        },
+        to_anchor: 2326,
+      },
+    },
+  },
+};
+
 const thermalConductivity: Measure<SystemName, ThermalConductivityUnit> = {
   systems: {
     SI: {
@@ -417,6 +451,7 @@ const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   temperature,
   density,
   specificHeat,
+  specificEnergy,
   thermalConductivity,
   dynamicViscosity,
   thermalExpansion,
@@ -479,6 +514,30 @@ export function tryDescribeUnit(value: string): UnitDescription | null {
 /** Narrows a saved or user supplied string to a known unit. */
 export function isUnitSymbol(value: string): value is UnitSymbol {
   return tryDescribeUnit(value) !== null;
+}
+
+/**
+ * Splits a composite unit such as `kg/m3@°C` into the value unit and the axis
+ * unit. Returns null when either part is not a known unit.
+ */
+export function parseCompositeUnit(
+  unit: string,
+): { readonly unit: UnitSymbol; readonly axis: UnitSymbol } | null {
+  const at = unit.indexOf('@');
+  if (at <= 0 || at === unit.length - 1) {
+    return null;
+  }
+  const valueUnit = unit.slice(0, at);
+  const axisUnit = unit.slice(at + 1);
+  if (!isUnitSymbol(valueUnit) || !isUnitSymbol(axisUnit)) {
+    return null;
+  }
+  return { unit: valueUnit, axis: axisUnit };
+}
+
+/** Joins a value unit and an axis unit into a composite unit. */
+export function compositeUnit(value: UnitSymbol, axis: UnitSymbol): string {
+  return `${value}@${axis}`;
 }
 
 /**

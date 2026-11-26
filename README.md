@@ -59,6 +59,7 @@ src/
   models/               shared component models, with their data tables
     inductor-types.ts   inductor saturation table and L(i) law
     capacitor-types.ts  capacitor DC-bias table and C(V) law
+    materials.ts        shared solids/liquids table and heat helpers
   categories/electrical/    everyday electrical calculations
     ohms-law.ts         calculator definition (pure data)
     voltage-divider.ts  two-resistor divider with E-series selection
@@ -78,10 +79,12 @@ src/
     catenary.ts         anchor force and chain length of a sagging cable
     raised-weight-energy.ts     gravitational energy of a raised mass
     index.ts            category module entry
-  categories/fluids/    working-fluid properties and flow
-    dippr-101.ts        DIPPR equation 101 correlation
-    fluids.ts           fluid property table
-    volume-and-weight.ts        volume and weight from a fluid's density
+  categories/materials/  solids and liquids, heat, and volume vs weight
+    energy-and-temperature-change.ts  sensible heat Q = mcΔT
+    phase-change-heat.ts        latent heat across a phase boundary
+    volume-vs-weight.ts         volume and weight from a material's density
+    index.ts            category module entry
+  categories/fluids/    working-fluid flow
     orifice-flow.ts     discharge through an orifice under a head
     pipe-flow.ts        flow, velocity, and diameter in a full pipe
     pipe-pressure-drop.ts       pressure loss along a pipe at a flow rate

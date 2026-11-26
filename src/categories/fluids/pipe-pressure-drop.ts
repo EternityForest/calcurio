@@ -58,7 +58,8 @@ export const pipePressureDrop: CalculatorDefinition = {
     {
       name: 'fluid',
       label: 'Fluid',
-      table: 'fluids',
+      table: 'materials',
+      filter: 'viscosity',
       description: 'Working fluid, which sets its density and viscosity.',
     },
     {

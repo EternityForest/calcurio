@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   choicesForUnit,
+  compositeUnit,
   convertUnit,
   isUnitSymbol,
   measureOf,
+  parseCompositeUnit,
   tryDescribeUnit,
   unitsOfKind,
 } from './units.js';
@@ -24,6 +26,36 @@ describe('convertUnit', () => {
     expect(convertUnit(25, '°C', 'K')).toBeCloseTo(298.15, 12);
     expect(convertUnit(100, '°C', '°F')).toBeCloseTo(212, 12);
     expect(convertUnit(-40, '°C', '°F')).toBeCloseTo(-40, 12);
+  });
+
+  it('converts between specific energy units', () => {
+    expect(convertUnit(1, 'kJ/kg', 'J/kg')).toBeCloseTo(1000, 12);
+    expect(convertUnit(1, 'cal/g', 'J/kg')).toBeCloseTo(4184, 12);
+    expect(convertUnit(1, 'Btu/lb', 'J/kg')).toBeCloseTo(2326, 12);
+  });
+});
+
+describe('composite units', () => {
+  it('splits a value unit and an axis unit', () => {
+    expect(parseCompositeUnit('J/(kg·K)@°C')).toEqual({
+      unit: 'J/(kg·K)',
+      axis: '°C',
+    });
+    expect(parseCompositeUnit('kg/m3@°C')).toEqual({
+      unit: 'kg/m3',
+      axis: '°C',
+    });
+  });
+
+  it('rejects malformed composite units', () => {
+    expect(parseCompositeUnit('kg/m3')).toBeNull();
+    expect(parseCompositeUnit('kg/m3@')).toBeNull();
+    expect(parseCompositeUnit('@°C')).toBeNull();
+    expect(parseCompositeUnit('kg/m3@not-a-unit')).toBeNull();
+  });
+
+  it('joins a value unit and an axis unit', () => {
+    expect(compositeUnit('kg/m3', '°C')).toBe('kg/m3@°C');
   });
 });
 

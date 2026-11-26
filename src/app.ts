@@ -23,6 +23,13 @@ export const CATEGORY_MANIFEST = {
       'Working-fluid properties and flow through pipes and orifices.',
     load: () => import('./categories/fluids/index.js'),
   },
+  materials: {
+    title: 'Materials',
+    description:
+      'Thermal and bulk properties of solids and liquids, including latent ' +
+      'heat and temperature-dependent specific heat.',
+    load: () => import('./categories/materials/index.js'),
+  },
   physics: {
     title: 'Physics',
     description: 'Wave propagation and the speed of light in media.',

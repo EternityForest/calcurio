@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { CalculatorRuntime } from '../../framework/runtime.js';
 import { TableRegistry } from '../../framework/tables.js';
 import { assertCalculatorTests } from '../../framework/testing.js';
-import { fluidsTable } from './fluids.js';
+import { materialsTable } from '../../models/materials.js';
 import { pipePressureDrop } from './pipe-pressure-drop.js';
 
-const registry = new TableRegistry([fluidsTable]);
+const registry = new TableRegistry([materialsTable]);
 
 function number(value: unknown): number {
   if (typeof value !== 'number') {
@@ -19,6 +19,13 @@ describe('Pipe pressure drop', () => {
     expect(() =>
       assertCalculatorTests(pipePressureDrop, { tables: registry }),
     ).not.toThrow();
+  });
+
+  it('hides materials that have no viscosity', () => {
+    const calc = new CalculatorRuntime(pipePressureDrop, registry);
+    const keys = calc.tableChoices('fluid').map((choice) => choice.key);
+    expect(keys).toContain('water');
+    expect(keys).not.toContain('aluminum');
   });
 
   it('brings in density and viscosity when a fluid is chosen', () => {

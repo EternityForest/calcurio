@@ -202,12 +202,14 @@ export class CalculatorView extends LitElement {
         kind: 'tableSelect',
         value: runtime.selectedKey(name) ?? '',
         choices: runtime.tableChoices(name),
+        findClosest: runtime.canFindClosestRow(name),
       };
       return html`
         <calc-variable-field
           .model=${model}
           .onSelectionChange=${(key: string) =>
             this.selectRow(runtime, name, key)}
+          .onFindClosest=${() => this.findClosestRow(runtime, name)}
           .onCalculate=${() => runtime.calculate(name)}
         ></calc-variable-field>
       `;
@@ -265,6 +267,16 @@ export class CalculatorView extends LitElement {
       return { ok: true };
     } catch (error) {
       return { ok: false, message: errorMessage(error) };
+    }
+  }
+
+  /** Picks the row closest to the values already entered, if any matches. */
+  private findClosestRow(runtime: CalculatorRuntime, name: string): void {
+    try {
+      runtime.findClosestRow(name);
+    } catch (error) {
+      this.status = `Could not find a row: ${errorMessage(error)}`;
+      this.requestUpdate();
     }
   }
 

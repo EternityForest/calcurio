@@ -59,6 +59,16 @@ export class CustomStorageError extends Error {
 }
 
 /**
+ * Raised when user-added table rows cannot be stored or read back.
+ */
+export class TableRowsStorageError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'TableRowsStorageError';
+  }
+}
+
+/**
  * Raised when user text is not a finite number.
  */
 export class NumberFormatError extends Error {

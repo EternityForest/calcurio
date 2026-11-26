@@ -44,6 +44,11 @@ export interface TableSelectFieldModel extends FieldBase {
   /** Selected row key, or an empty string when nothing is selected. */
   readonly value: string;
   readonly choices: readonly FieldChoice[];
+  /**
+   * Whether to offer a "Find closest" button. Shown only while no row is
+   * selected and the referencing fields already hold values to match.
+   */
+  readonly findClosest?: boolean;
 }
 
 /** A free text value. */
@@ -56,9 +61,7 @@ export interface TextFieldModel extends FieldBase {
 
 /** Everything a single value field needs, derived from the runtime. */
 export type FieldModel =
-  | NumberFieldModel
-  | TableSelectFieldModel
-  | TextFieldModel;
+  NumberFieldModel | TableSelectFieldModel | TextFieldModel;
 
 /**
  * One labelled value box with a unit selector and an optional Calculate
@@ -74,6 +77,7 @@ export class VariableField extends LitElement {
   onCommit: (text: string) => ValueUpdateResult = () => ({ ok: true });
   onUnitChange: (unit: UnitSymbol) => void = () => {};
   onSelectionChange: (key: string) => ValueUpdateResult = () => ({ ok: true });
+  onFindClosest: () => void = () => {};
   onCalculate: () => void = () => {};
   onPlot: () => void = () => {};
 
@@ -254,7 +258,27 @@ export class VariableField extends LitElement {
           )}
         </select>
         ${this.renderCalculateButton(model)}
+        ${this.renderFindClosestButton(model)}
       </div>
+    `;
+  }
+
+  private renderFindClosestButton(
+    model: TableSelectFieldModel,
+  ): TemplateResult | typeof nothing {
+    if (model.findClosest !== true) {
+      return nothing;
+    }
+    return html`
+      <button
+        class="button calc-find-closest"
+        type="button"
+        title="Select the row closest to the values already entered"
+        data-testid=${`find-closest-${model.name}`}
+        @click=${this.handleFindClosest}
+      >
+        Find closest
+      </button>
     `;
   }
 
@@ -354,6 +378,11 @@ export class VariableField extends LitElement {
       this.localError = result.message ?? 'That row cannot be selected.';
     }
     this.requestUpdate();
+  };
+
+  private readonly handleFindClosest = (): void => {
+    this.localError = '';
+    this.onFindClosest();
   };
 
   private readonly handleCalculate = (): void => {

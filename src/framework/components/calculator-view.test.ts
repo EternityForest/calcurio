@@ -399,3 +399,75 @@ describe('CalculatorView computeState', () => {
     expect(runtime.state['sum']).toBeNull();
   });
 });
+
+/** A table with two numeric columns, used to exercise the closest row. */
+function rectanglesTable(): TableDefinition {
+  return {
+    id: 'rectangles',
+    title: 'Rectangles',
+    keyColumn: 'id',
+    labelColumn: 'label',
+    columns: [
+      { key: 'id', label: 'ID', kind: 'text' },
+      { key: 'label', label: 'Label', kind: 'text' },
+      { key: 'width', label: 'Width', unit: 'mm' },
+      { key: 'height', label: 'Height', unit: 'mm' },
+    ],
+    rows: [
+      { id: 'a', label: 'A', width: 10, height: 100 },
+      { id: 'b', label: 'B', width: 20, height: 20 },
+    ],
+  };
+}
+
+/** A definition whose select is matched from a width and a height field. */
+function closestDefinition(): CalculatorDefinition {
+  return {
+    id: 'closest',
+    title: 'Closest',
+    variables: [
+      { name: 'shape', label: 'Shape', table: 'rectangles' },
+      {
+        name: 'width',
+        label: 'Width',
+        unit: 'mm',
+        tableSelect: 'shape',
+        tableField: 'width',
+      },
+      {
+        name: 'height',
+        label: 'Height',
+        unit: 'mm',
+        tableSelect: 'shape',
+        tableField: 'height',
+      },
+    ],
+  };
+}
+
+describe('CalculatorView find closest', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('offers the button only before a row is selected, then selects a row', async () => {
+    const runtime = new CalculatorRuntime(
+      closestDefinition(),
+      new TableRegistry([rectanglesTable()]),
+    );
+    const view = await mount(runtime, null);
+
+    expect(view.querySelector('[data-testid="find-closest-shape"]')).toBeNull();
+
+    runtime.setDisplayText('width', '12');
+    await view.updateComplete;
+    expect(
+      view.querySelector('[data-testid="find-closest-shape"]'),
+    ).not.toBeNull();
+
+    requireButton(view, 'find-closest-shape').click();
+    await view.updateComplete;
+    expect(runtime.selectedKey('shape')).toBe('a');
+    expect(view.querySelector('[data-testid="find-closest-shape"]')).toBeNull();
+  });
+});

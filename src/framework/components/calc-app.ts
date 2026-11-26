@@ -9,7 +9,13 @@ import type {
 } from '../app.js';
 import { errorMessage } from '../errors.js';
 import { CalculatorRuntime } from '../runtime.js';
-import type { CalculatorDefinition, CategoryManifest } from '../types.js';
+import { TableRowStore, applyTableRows } from '../table-rows.js';
+import type {
+  CalculatorDefinition,
+  CategoryManifest,
+  TableDefinition,
+  TableResolver,
+} from '../types.js';
 import './calculator-view.js';
 import './table-view.js';
 
@@ -48,6 +54,7 @@ export class CalcApp extends LitElement {
   private loadingCategoryId: string | null = null;
   private loadError = '';
   private bookmarkStore: BookmarkStore | null = null;
+  private tableRowStore: TableRowStore | null = null;
   private bookmarksInitialized = false;
   private readonly runtimes = new Map<string, CachedRuntime>();
 
@@ -61,6 +68,7 @@ export class CalcApp extends LitElement {
       this.bookmarksInitialized = true;
       const storage = browserLocalStorage();
       this.bookmarkStore = storage === null ? null : new BookmarkStore(storage);
+      this.tableRowStore = storage === null ? null : new TableRowStore(storage);
     }
   }
 
@@ -331,7 +339,55 @@ export class CalcApp extends LitElement {
     if (table === undefined) {
       return html` <p class="alert danger">That table is not available.</p> `;
     }
-    return html` <calc-table-view .table=${table}></calc-table-view> `;
+    return html`
+      <calc-table-view
+        .table=${table}
+        .store=${this.tableRowStore}
+        .onChanged=${this.handleTableRowsChanged}
+      ></calc-table-view>
+    `;
+  }
+
+  /**
+   * Re-resolves the tables behind every cached calculator after custom rows
+   * change, then re-renders so the table view shows the new overlay. Values
+   * already entered in the calculators are preserved.
+   */
+  private readonly handleTableRowsChanged = (): void => {
+    for (const cached of this.runtimes.values()) {
+      try {
+        cached.runtime.refreshTables();
+      } catch {
+        // A table that can no longer be resolved is left as it was; the
+        // store validates rows on save, so this should not happen.
+      }
+    }
+    this.requestUpdate();
+  };
+
+  /**
+   * Resolver handed to a runtime. It layers the user's custom rows onto each
+   * built-in table so a calculator sees overrides and additions, while the
+   * table view keeps showing the pristine built-in rows.
+   */
+  private resolverFor(handle: CategoryHandle): TableResolver {
+    const store = this.tableRowStore;
+    if (store === null) {
+      return handle;
+    }
+    return {
+      getTable: (id: string): TableDefinition | undefined => {
+        const base = handle.getTable(id);
+        if (base === undefined) {
+          return undefined;
+        }
+        try {
+          return applyTableRows(base, store.list(id));
+        } catch {
+          return base;
+        }
+      },
+    };
   }
 
   /**
@@ -352,7 +408,10 @@ export class CalcApp extends LitElement {
     ) {
       return existing.runtime;
     }
-    const runtime = new CalculatorRuntime(registered.definition, handle);
+    const runtime = new CalculatorRuntime(
+      registered.definition,
+      this.resolverFor(handle),
+    );
     this.runtimes.set(registered.globalId, {
       definition: registered.definition,
       runtime,

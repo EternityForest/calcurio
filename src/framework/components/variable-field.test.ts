@@ -2,7 +2,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { VariableField } from './variable-field.js';
-import type { NumberFieldModel } from './variable-field.js';
+import type {
+  FieldModel,
+  NumberFieldModel,
+  TableSelectFieldModel,
+} from './variable-field.js';
 
 function fieldModel(
   overrides: Partial<NumberFieldModel> = {},
@@ -25,12 +29,33 @@ function fieldModel(
   };
 }
 
-async function mount(model: NumberFieldModel): Promise<VariableField> {
+async function mount(model: FieldModel): Promise<VariableField> {
   const field = new VariableField();
   field.model = model;
   document.body.append(field);
   await field.updateComplete;
   return field;
+}
+
+function selectModel(
+  overrides: Partial<TableSelectFieldModel> = {},
+): TableSelectFieldModel {
+  return {
+    kind: 'tableSelect',
+    name: 'material',
+    label: 'Material',
+    description: 'Chosen material.',
+    value: '',
+    choices: [
+      { key: 'copper', label: 'Copper' },
+      { key: 'silver', label: 'Silver' },
+    ],
+    editable: true,
+    computable: false,
+    pinned: false,
+    issues: [],
+    ...overrides,
+  };
 }
 
 function inputOf(field: VariableField): HTMLInputElement {
@@ -193,5 +218,33 @@ describe('VariableField', () => {
     }
     button.click();
     expect(onPlot).not.toHaveBeenCalled();
+  });
+
+  it('renders the Find closest button when the model offers one', async () => {
+    const field = await mount(selectModel({ findClosest: true }));
+    const button = field.querySelector<HTMLButtonElement>(
+      'button.calc-find-closest',
+    );
+    expect(button).not.toBeNull();
+    expect(button?.textContent?.trim()).toBe('Find closest');
+  });
+
+  it('hides the Find closest button when the model does not offer one', async () => {
+    const field = await mount(selectModel());
+    expect(field.querySelector('button.calc-find-closest')).toBeNull();
+  });
+
+  it('calls onFindClosest when the Find closest button is clicked', async () => {
+    const field = await mount(selectModel({ findClosest: true }));
+    const onFindClosest = vi.fn();
+    field.onFindClosest = onFindClosest;
+    const button = field.querySelector<HTMLButtonElement>(
+      'button.calc-find-closest',
+    );
+    if (button === null) {
+      throw new Error('Missing Find closest button.');
+    }
+    button.click();
+    expect(onFindClosest).toHaveBeenCalledTimes(1);
   });
 });

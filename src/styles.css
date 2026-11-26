@@ -174,6 +174,57 @@ calc-app {
   opacity: 0.7;
 }
 
+.calc-table-toolbar {
+  margin-bottom: 0.25rem;
+}
+
+.calc-table-lookup-cell {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.calc-table-lookup-button,
+.calc-table-action {
+  font-size: 0.75rem;
+  padding: 0.1rem 0.4rem;
+}
+
+.calc-table-actions {
+  display: flex;
+  gap: 0.35rem;
+  justify-content: flex-end;
+}
+
+.calc-table-custom-row td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent, #2563eb);
+}
+
+.calc-row-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.calc-row-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.calc-rows-markdown {
+  font-family: monospace;
+  font-size: 0.85rem;
+  white-space: pre;
+}
+
+.calc-lookup-result {
+  margin: 0;
+}
+
+.calc-lookup-points {
+  font-size: 0.85rem;
+}
+
 .calc-calculate,
 .calc-plot {
   flex: 0 0 auto;
@@ -329,13 +380,18 @@ calc-app {
 
 @media print {
   .calc-actions,
+  .calc-table-toolbar,
+  .calc-table-actions,
   calc-bookmarks-dialog,
   calc-graph-dialog,
   calc-custom-editor,
   calc-custom-step-dialog,
   calc-custom-import,
   calc-custom-export,
-  calc-calculator-browser {
+  calc-calculator-browser,
+  calc-lookup-dialog,
+  calc-table-row-dialog,
+  calc-table-rows-dialog {
     display: none;
   }
 }

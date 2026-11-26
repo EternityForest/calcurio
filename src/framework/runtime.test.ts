@@ -994,3 +994,167 @@ describe('CalculatorRuntime equivalent variables', () => {
     expect(calc.state['diameter']).toBe(5);
   });
 });
+
+/** A table with two numeric columns, used to rank rows by squared error. */
+const rectanglesTable: TableDefinition = {
+  id: 'rectangles',
+  title: 'Rectangles',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    { key: 'width', label: 'Width', unit: 'mm' },
+    { key: 'height', label: 'Height', unit: 'mm' },
+  ],
+  rows: [
+    { id: 'a', label: 'A', width: 10, height: 100 },
+    { id: 'b', label: 'B', width: 20, height: 20 },
+  ],
+};
+
+/** A definition whose select is matched from a width and a height field. */
+function rectanglesDefinition(): CalculatorDefinition {
+  return {
+    id: 'rectangles',
+    title: 'Rectangles',
+    variables: [
+      { name: 'shape', label: 'Shape', table: 'rectangles' },
+      {
+        name: 'width',
+        label: 'Width',
+        unit: 'mm',
+        tableSelect: 'shape',
+        tableField: 'width',
+      },
+      {
+        name: 'height',
+        label: 'Height',
+        unit: 'mm',
+        tableSelect: 'shape',
+        tableField: 'height',
+      },
+    ],
+  };
+}
+
+/**
+ * A table whose specific heat is a lookup column sampled against temperature,
+ * used to check that the axis value drives the closest-row ranking.
+ */
+const thermalTable: TableDefinition = {
+  id: 'thermal',
+  title: 'Thermal',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    {
+      key: 'specificHeat',
+      label: 'Specific heat',
+      unit: 'J/(kg·K)@°C',
+      kind: 'lookup',
+    },
+  ],
+  rows: [
+    { id: 'steel', label: 'Steel', specificHeat: '460@20; 600@500' },
+    { id: 'water', label: 'Water', specificHeat: '4182@20; 4200@100' },
+  ],
+};
+
+/** A definition whose lookup field is interpolated at the temperature value. */
+function thermalDefinition(): CalculatorDefinition {
+  return {
+    id: 'thermal',
+    title: 'Thermal',
+    variables: [
+      { name: 'material', label: 'Material', table: 'thermal' },
+      { name: 'temperature', label: 'Temperature', unit: '°C', default: 20 },
+      {
+        name: 'specificHeat',
+        label: 'Specific heat',
+        unit: 'J/(kg·K)',
+        tableSelect: 'material',
+        tableField: 'specificHeat',
+        tableAxis: 'temperature',
+      },
+    ],
+  };
+}
+
+describe('CalculatorRuntime findClosestRow', () => {
+  function runtime(): CalculatorRuntime {
+    return new CalculatorRuntime(
+      rectanglesDefinition(),
+      new TableRegistry([rectanglesTable]),
+    );
+  }
+
+  it('offers the closest row only before a row is selected', () => {
+    const calc = runtime();
+    expect(calc.canFindClosestRow('shape')).toBe(false);
+
+    calc.setDisplayText('width', '12');
+    expect(calc.state['shape']).toBeNull();
+    expect(calc.canFindClosestRow('shape')).toBe(true);
+
+    calc.setDisplayText('height', '25');
+    expect(calc.findClosestRow('shape')).toBe('b');
+    expect(calc.state['shape']).toBe('b');
+    expect(calc.canFindClosestRow('shape')).toBe(false);
+  });
+
+  it('returns null when no referencing field holds a value', () => {
+    const calc = runtime();
+    expect(calc.findClosestRow('shape')).toBeNull();
+    expect(calc.state['shape']).toBeNull();
+  });
+
+  it('picks the row with the smallest total squared error', () => {
+    const calc = runtime();
+    calc.setDisplayText('width', '11');
+    calc.setDisplayText('height', '90');
+    expect(calc.findClosestRow('shape')).toBe('a');
+  });
+
+  it('interpolates a lookup column at the axis value', () => {
+    const calc = new CalculatorRuntime(
+      thermalDefinition(),
+      new TableRegistry([thermalTable]),
+    );
+
+    calc.setDisplayText('temperature', '500');
+    calc.setDisplayText('specificHeat', '600');
+    expect(calc.findClosestRow('material')).toBe('steel');
+
+    calc.setDisplayText('temperature', '20');
+    calc.setDisplayText('specificHeat', '4182');
+    expect(calc.findClosestRow('material')).toBe('water');
+  });
+
+  it('refuses to choose a row for a read-only select', () => {
+    const definition: CalculatorDefinition = {
+      id: 'readonly',
+      title: 'Read only',
+      variables: [
+        { name: 'shape', label: 'Shape', table: 'rectangles', editable: false },
+        {
+          name: 'width',
+          label: 'Width',
+          unit: 'mm',
+          tableSelect: 'shape',
+          tableField: 'width',
+        },
+      ],
+    };
+    const calc = new CalculatorRuntime(
+      definition,
+      new TableRegistry([rectanglesTable]),
+    );
+    calc.setDisplayText('width', '12');
+
+    expect(calc.canFindClosestRow('shape')).toBe(false);
+    expect(() => calc.findClosestRow('shape')).toThrow(/read-only/);
+  });
+});

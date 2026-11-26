@@ -63,7 +63,8 @@ export class TableRegistry implements TableResolver {
    * module loading safe to retry.
    */
   add(source: TableSource): TableSource {
-    const existing = this.tables.get(source.id) ?? this.providers.get(source.id);
+    const existing =
+      this.tables.get(source.id) ?? this.providers.get(source.id);
     if (existing !== undefined) {
       if (existing === source) {
         return existing;
@@ -205,59 +206,9 @@ export function validateTableDefinition(table: TableDefinition): void {
 
   const seenKeys = new Set<string>();
   for (const [index, row] of table.rows.entries()) {
-    const where = `row ${index + 1}`;
-    for (const column of table.columns) {
-      if (!Object.hasOwn(row, column.key)) {
-        problems.push(`${where}: missing column "${column.key}".`);
-      }
-    }
-    for (const key of Object.keys(row)) {
-      if (!columnsByKey.has(key)) {
-        problems.push(`${where}: unknown column "${key}".`);
-      }
-    }
-
-    const keyValue = row[table.keyColumn];
-    if (typeof keyValue !== 'string' || keyValue.trim() === '') {
-      problems.push(`${where}: key column must contain a non-empty string.`);
-    } else if (seenKeys.has(keyValue)) {
-      problems.push(`${where}: duplicate key "${keyValue}".`);
-    } else {
-      seenKeys.add(keyValue);
-    }
-
-    for (const column of table.columns) {
-      const value = row[column.key];
-      if (value === null || value === undefined) {
-        continue;
-      }
-      if (isBooleanColumn(column)) {
-        if (typeof value !== 'boolean') {
-          problems.push(
-            `${where}: boolean column "${column.key}" must be true or false.`,
-          );
-        }
-      } else if (isLookupColumn(column)) {
-        if (typeof value !== 'string') {
-          problems.push(
-            `${where}: lookup column "${column.key}" must be text.`,
-          );
-        } else if (parseLookupCell(value) === null) {
-          problems.push(
-            `${where}: lookup column "${column.key}" must hold pairs such as ` +
-              '"100@25; 39@844".',
-          );
-        }
-      } else if (isTextColumn(column)) {
-        if (typeof value !== 'string') {
-          problems.push(`${where}: text column "${column.key}" must be text.`);
-        }
-      } else if (typeof value !== 'number' || !Number.isFinite(value)) {
-        problems.push(
-          `${where}: numeric column "${column.key}" must be a finite number.`,
-        );
-      }
-    }
+    problems.push(
+      ...tableRowProblems(table, row, `row ${index + 1}`, seenKeys),
+    );
   }
 
   if (problems.length > 0) {
@@ -265,6 +216,78 @@ export function validateTableDefinition(table: TableDefinition): void {
       `Invalid table "${table.id}":\n- ${problems.join('\n- ')}`,
     );
   }
+}
+
+/**
+ * Returns the problems that make one row unusable, each labelled with `where`.
+ * Pass the same `seenKeys` set for every row of a table so duplicate key values
+ * are reported across rows; the set gains each accepted key as a side effect.
+ * Shared by table validation and by the custom-row store and importers, so a
+ * user-added row is held to the same rules as a built-in one.
+ */
+export function tableRowProblems(
+  table: TableDefinition,
+  row: TableRow,
+  where: string,
+  seenKeys: Set<string> = new Set<string>(),
+): readonly string[] {
+  const problems: string[] = [];
+  const columnsByKey = new Map(
+    table.columns.map((column) => [column.key, column]),
+  );
+
+  for (const column of table.columns) {
+    if (!Object.hasOwn(row, column.key)) {
+      problems.push(`${where}: missing column "${column.key}".`);
+    }
+  }
+  for (const key of Object.keys(row)) {
+    if (!columnsByKey.has(key)) {
+      problems.push(`${where}: unknown column "${key}".`);
+    }
+  }
+
+  const keyValue = row[table.keyColumn];
+  if (typeof keyValue !== 'string' || keyValue.trim() === '') {
+    problems.push(`${where}: key column must contain a non-empty string.`);
+  } else if (seenKeys.has(keyValue)) {
+    problems.push(`${where}: duplicate key "${keyValue}".`);
+  } else {
+    seenKeys.add(keyValue);
+  }
+
+  for (const column of table.columns) {
+    const value = row[column.key];
+    if (value === null || value === undefined) {
+      continue;
+    }
+    if (isBooleanColumn(column)) {
+      if (typeof value !== 'boolean') {
+        problems.push(
+          `${where}: boolean column "${column.key}" must be true or false.`,
+        );
+      }
+    } else if (isLookupColumn(column)) {
+      if (typeof value !== 'string') {
+        problems.push(`${where}: lookup column "${column.key}" must be text.`);
+      } else if (parseLookupCell(value) === null) {
+        problems.push(
+          `${where}: lookup column "${column.key}" must hold pairs such as ` +
+            '"100@25; 39@844".',
+        );
+      }
+    } else if (isTextColumn(column)) {
+      if (typeof value !== 'string') {
+        problems.push(`${where}: text column "${column.key}" must be text.`);
+      }
+    } else if (typeof value !== 'number' || !Number.isFinite(value)) {
+      problems.push(
+        `${where}: numeric column "${column.key}" must be a finite number.`,
+      );
+    }
+  }
+
+  return problems;
 }
 
 /** True for columns that store text. */

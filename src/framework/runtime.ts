@@ -32,6 +32,7 @@ import type {
   TableColumn,
   TableDefinition,
   TableResolver,
+  TableRow,
   TableSelectVariableDefinition,
   TextVariableDefinition,
   ValidationIssue,
@@ -250,6 +251,16 @@ export class CalculatorRuntime {
   }
 
   /**
+   * Re-resolves the tables behind this calculator and recomputes. Used when a
+   * table's rows change underneath a live calculator, for example after custom
+   * rows are edited. Every stored value is kept.
+   */
+  refreshTables(): void {
+    this.bindTables(this.tables);
+    this.recompute();
+  }
+
+  /**
    * Rebuilds the variable indexes, table bindings, and compute order from the
    * current variable list. Values for names that survive are preserved; stale
    * names are dropped.
@@ -398,6 +409,42 @@ export class CalculatorRuntime {
     this.requireTableSelect(name);
     const value = this.values[name];
     return typeof value === 'string' ? value : null;
+  }
+
+  /**
+   * True when a table select has no row yet but could pick one by matching the
+   * values already entered in the fields that read it. Drives the "Find
+   * closest" button, which only helps before a row has been chosen.
+   */
+  canFindClosestRow(name: string): boolean {
+    const binding = this.tableSelects.get(name);
+    if (binding === undefined || this.selectedKey(name) !== null) {
+      return false;
+    }
+    if (!this.isEditable(name)) {
+      return false;
+    }
+    return this.hasMatchableField(binding);
+  }
+
+  /**
+   * Chooses the row whose columns best match the values already entered in the
+   * fields that read this select, so a user can start from approximate values
+   * instead of picking a row by hand. Rows are ranked by the sum of squared
+   * differences; a lookup column is compared at the axis variable's current
+   * value. Returns the chosen key, or null when nothing could be matched.
+   */
+  findClosestRow(name: string): string | null {
+    const binding = this.requireTableSelect(name);
+    if (!this.isEditable(name)) {
+      throw new Error(`${binding.variable.label} is read-only.`);
+    }
+    const key = this.closestRowKey(binding);
+    if (key === null) {
+      return null;
+    }
+    this.setSelection(name, key);
+    return key;
   }
 
   isComputable(name: string): boolean {
@@ -570,7 +617,8 @@ export class CalculatorRuntime {
       throw new Error(`${binding.variable.label} is read-only.`);
     }
     const normalized = key === '' ? null : key;
-    const row = normalized === null ? undefined : findRow(binding.table, normalized);
+    const row =
+      normalized === null ? undefined : findRow(binding.table, normalized);
     if (normalized !== null && row === undefined) {
       throw new RangeError(
         `Row "${normalized}" is not in table "${binding.table.id}".`,
@@ -1371,6 +1419,117 @@ export class CalculatorRuntime {
   }
 
   /**
+   * True when at least one field reading this select holds a finite number that
+   * could be matched against a row.
+   */
+  private hasMatchableField(binding: TableSelectBinding): boolean {
+    for (const field of this.tableFieldsBySelect.get(binding.variable.name) ??
+      []) {
+      const value = this.values[field.variable.name];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Row whose columns best match the values entered in the referencing fields,
+   * ranked by the sum of squared differences. A row is skipped when any
+   * referencing field has no value for it (or the value cannot be read).
+   */
+  private closestRowKey(binding: TableSelectBinding): string | null {
+    const fields = this.tableFieldsBySelect.get(binding.variable.name) ?? [];
+    const targets = fields
+      .map((field) => ({ field, value: this.values[field.variable.name] }))
+      .filter(
+        (entry): entry is { field: TableFieldBinding; value: number } =>
+          typeof entry.value === 'number' && Number.isFinite(entry.value),
+      );
+    if (targets.length === 0) {
+      return null;
+    }
+
+    let bestKey: string | null = null;
+    let bestError = Number.POSITIVE_INFINITY;
+    for (const row of binding.table.rows) {
+      if (!rowMatchesFilter(row, binding.variable.filter)) {
+        continue;
+      }
+      let error = 0;
+      let usable = true;
+      for (const { field, value } of targets) {
+        const candidate = this.rowFieldValue(field, row);
+        if (candidate === null) {
+          usable = false;
+          break;
+        }
+        const delta = candidate - value;
+        error += delta * delta;
+      }
+      if (!usable) {
+        continue;
+      }
+      const key = rowKey(binding.table, row);
+      if (key === null) {
+        continue;
+      }
+      if (error < bestError) {
+        bestError = error;
+        bestKey = key;
+      }
+    }
+    return bestKey;
+  }
+
+  /**
+   * Value a row offers a field in the field's base unit, or null when the row
+   * has no usable value. Unlike `deriveTableFieldValue` this reports nothing;
+   * it is used to rank candidate rows before one is chosen.
+   */
+  private rowFieldValue(
+    binding: TableFieldBinding,
+    row: TableRow,
+  ): number | null {
+    if (binding.lookup !== undefined) {
+      const axisVariable = this.variablesByName.get(
+        binding.lookup.axisVariable,
+      );
+      if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
+        return null;
+      }
+      const axisValue = this.values[binding.lookup.axisVariable];
+      if (typeof axisValue !== 'number' || !Number.isFinite(axisValue)) {
+        return null;
+      }
+      const text = row[binding.column.key];
+      if (typeof text !== 'string' || text.trim() === '') {
+        return null;
+      }
+      const points = parseLookupCell(text);
+      if (points === null) {
+        return null;
+      }
+      const axis = convertUnit(
+        axisValue,
+        axisVariable.unit,
+        binding.lookup.axisUnit,
+      );
+      const sampled = interpolateAt(points, axis);
+      if (sampled === null) {
+        return null;
+      }
+      return convertUnit(sampled, binding.columnUnit, binding.variable.unit);
+    }
+
+    const cell = numericCell(row[binding.column.key]);
+    if (cell === null) {
+      return null;
+    }
+    return convertUnit(cell, binding.columnUnit, binding.variable.unit);
+  }
+
+  /**
    * Brute-force search for the single row matching every referencing field
    * that currently has a value. No matches or several matches select nothing.
    */
@@ -1433,7 +1592,9 @@ export class CalculatorRuntime {
     }
 
     if (binding.lookup !== undefined) {
-      const axisVariable = this.variablesByName.get(binding.lookup.axisVariable);
+      const axisVariable = this.variablesByName.get(
+        binding.lookup.axisVariable,
+      );
       if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
         return null;
       }
@@ -1448,9 +1609,7 @@ export class CalculatorRuntime {
       }
       const points = parseLookupCell(text);
       if (points === null) {
-        this.addError(
-          `${binding.column.label} is malformed for row "${key}".`,
-        );
+        this.addError(`${binding.column.label} is malformed for row "${key}".`);
         return null;
       }
       const axis = convertUnit(
@@ -1603,7 +1762,9 @@ export class CalculatorRuntime {
       try {
         const result: unknown = compute(Object.freeze({ ...this.values }));
         return (
-          !isUnchanged(result) && !isMissing(result) && typeof result === 'string'
+          !isUnchanged(result) &&
+          !isMissing(result) &&
+          typeof result === 'string'
         );
       } catch {
         return false;

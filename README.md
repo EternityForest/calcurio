@@ -59,7 +59,7 @@ src/
   models/               shared component models, with their data tables
     inductor-types.ts   inductor saturation table and L(i) law
     capacitor-types.ts  capacitor DC-bias table and C(V) law
-  categories/basic/     one lazily loaded category
+  categories/electrical/    everyday electrical calculations
     ohms-law.ts         calculator definition (pure data)
     voltage-divider.ts  two-resistor divider with E-series selection
     low-pass-rlc.ts     low-pass RLC, RC, and LC filter
@@ -68,12 +68,27 @@ src/
     capacitor-impedance.ts      reactance of a capacitor at a frequency
     inductance-at-bias.ts       inductance of a part at a current
     capacitance-at-dc-bias.ts   capacitance of a part at a DC bias
+    wire-gauge.ts       wire-gauge geometry table
+    wire-metals.ts      conductor resistivity table
+    wire-resistance.ts  resistance of a wire from its gauge and metal
+    friis.ts            Friis free-space path loss
     e-series.ts         E3-E24 resistor and capacitor tables, built on demand
     index.ts            category module entry
-  categories/fluids/    working-fluid properties and volume-to-weight
+  categories/mechanical/    cable tension and stored energy
+    catenary.ts         anchor force of a sagging cable
+    raised-weight-energy.ts     gravitational energy of a raised mass
+    index.ts            category module entry
+  categories/fluids/    working-fluid properties and flow
     dippr-101.ts        DIPPR equation 101 correlation
     fluids.ts           fluid property table
     volume-and-weight.ts        volume and weight from a fluid's density
+    orifice-flow.ts     discharge through an orifice under a head
+    pipe-flow.ts        flow, velocity, and diameter in a full pipe
+    index.ts            category module entry
+  categories/physics/   wave propagation and the speed of light
+    wave-media.ts       propagation-medium table (speed and impedance)
+    wavelengths.ts      common wavelengths with their uses
+    speed-of-light.ts   speed, frequency, wavelength, and travel time
     index.ts            category module entry
   categories/conversions/   everyday conversions between equivalent units
     equivalent-units.ts builds a set of mutually-equivalent variables
@@ -89,6 +104,7 @@ src/
     subtract.ts         difference of two values
     multiply.ts         product of two to ten values
     divide.ts           quotient of two values
+    expression.ts       general expression evaluator (expr-eval)
     index.ts            category module entry
   categories/custom/    user-built multistep calculations
     library.ts          keeps registered calculators in step with storage
@@ -259,7 +275,10 @@ does not ship: `resistance` (`Ω`, `mΩ`, `kΩ`, `MΩ`), `resistivity`,
 `inductance` (`H`, `mH`, `µH`, `nH`), `capacitance` (`F`, `mF`, `µF`, `nF`,
 `pF`), `temperature` (`°C`, `K`, `°F`, `°R`), `density` (`kg/m3`, `g/cm3`,
 …), `specificHeat`, `thermalConductivity`, `dynamicViscosity`,
-`thermalExpansion`, and a dimensionless `ratio` (`1`, `%`). The temperature
+`thermalExpansion`, a dimensionless `ratio` (`1`, `%`), and a `decibel`
+measure (`dB`). The decibel has a single unit, so it only labels a value that
+is already logarithmic — a path loss or an antenna gain — and never converts
+against anything. The temperature
 measure spells the degrees out (`°C` rather than the library's bare `C`) and
 leaves `F` to the farad. The unit selector lists the variable's base unit
 followed by every unit of the same kind, or by `unitOptions` when it is
@@ -303,21 +322,29 @@ twice — once in TypeScript for the calculator outputs and once as ngspice
 behavioural sources (`BL … ddt(i)` and `Bcap … ddt(v)`) in the netlist — the
 closed-form and simulated curves agree; keep the two in step.
 
-The Basic category uses the models directly in two calculators, **Inductance
-at a current bias** and **Capacitance at a DC bias**, which the SPICE inrush
-transient then builds on.
+The Electrical category uses the models directly in two calculators,
+**Inductance at a current bias** and **Capacitance at a DC bias**, which the
+SPICE inrush transient then builds on.
 
-### Basic calculators
+### Electrical calculators
 
-Alongside Ohm's law and the component-bias models, the **Basic** category
+Alongside Ohm's law and the component-bias models, the **Electrical** category
 adds a two-resistor **Voltage divider** (type each resistance or pick one
 from the E-series tables; it reports the output voltage and a read-only
 divider ratio), **Low-pass** and **High-pass RLC filters** (set the
 inductance to zero to collapse to the RC case, or the resistance to zero for
 the undamped LC case; each reports the time constant and the -3 dB
-frequency), and **Inductor** and **Capacitor impedance** at a frequency
-(enter any two of frequency, component value, and impedance, then Calculate
-the third).
+frequency), **Inductor** and **Capacitor impedance** at a frequency (enter
+any two of frequency, component value, and impedance, then Calculate the
+third), and **Wire resistance**, which sets the conductor geometry from the
+wire-gauge table (or from a typed cross-section, diameter, or radius) and the
+resistivity from the metal table to give the resistance.
+
+**Friis path loss** gives the free-space loss of a radio link,
+`20 log10(4πdf/c)`, from the carrier frequency and the link distance. It
+reports the free-space wavelength at that frequency as a convenience. The
+transmit power and the two antenna gains are recorded inputs that do not
+change the loss — the calculator only works out the loss.
 
 ### Fluids and DIPPR equation 101
 
@@ -338,8 +365,14 @@ coefficients return pascals and the viscosity coefficients return pascal
 seconds. Vapor pressure and viscosity are only fitted for the pure
 substances, so the glycol mixtures and mineral oil leave those cells empty.
 
-The one calculator, **Volume and weight**, sets a fluid's density from the
-table; entering either a volume or a weight then gives the other.
+The category's calculators reach both the fluid data and the flow physics.
+**Volume and weight** sets a fluid's density from the table; entering either
+a volume or a weight then gives the other. **Orifice flow** gives the
+discharge under a falling head, `Q = Cd·A·√(2gh)`, with the area taken from
+the orifice diameter and the discharge coefficient defaulting to 0.62 for a
+sharp-edged opening. **Pipe flow** relates the pipe diameter, the mean
+velocity, and the flow rate through `Q = A·v` for a full pipe: enter any two
+and Calculate the third.
 
 ### Conversions
 
@@ -365,6 +398,54 @@ each combine two to ten values, with a `slots` config field choosing how many
 operands appear; **Subtract** and **Divide** always take exactly two. They use
 the same `buildVariables` pattern as everything else, so the operand count is a
 setting rather than a fixed field list.
+
+**Expression** is a general evaluator built on
+[expr-eval](https://github.com/silentmatt/expr-eval) (MIT). A formula is
+written in the always-present input `x` (default 0) plus a configurable
+number of extra inputs `a`, `b`, `c`, …, and evaluates to `y`. It supports
+the usual `+ - * / ^`, parentheses, and functions such as `sin`, `cos`,
+`sqrt`, `log`, `abs`, and `min`. expr-eval parses and evaluates without
+`eval`, and assignment, function definitions, the `in` operator, and member
+access are switched off, so a typed formula can only read the inputs it is
+offered and can never run arbitrary code. The extra-input count is a `config`
+field, so the visible input list is a setting rather than a fixed set of
+fields, and an expression naming an unknown variable is reported on the
+expression field.
+
+### Mechanical
+
+The **Mechanical** category covers static loads and stored energy.
+**Catenary (chain curve)** gives the tension each anchor of a sagging cable
+carries: enter the horizontal span, the droop at the centre, the load hung at
+midspan, and the total weight of the chain or rope. The horizontal tension
+takes the small-sag cable approximation `H = P·W/(4·D) + Q·W/(8·D)` (span
+`W`, droop `D`, centre load `P`, rope weight `Q`), and the vertical reaction
+carries half the total weight; the anchor force is their vector sum. Entering
+the rope's total weight is usually the easiest figure to measure. **Energy
+stored in a raised weight** gives the gravitational potential energy of a
+mass lifted by a height, `m·g·h`; gravity defaults to standard gravity
+(9.80665 m/s²) but can be changed for another location.
+
+### Physics
+
+The **Physics** category covers wave propagation and the speed of light, with
+two reference tables and one calculator. The **wave media** table lists the
+speed of light and the impedance of common propagation media: the bulk
+dielectrics (vacuum, air, PTFE) and the usual coax and twisted-pair cables
+(Cat5e, RG-58, RG-316, RG-400, LMR-400). For a bulk medium the speed is the
+phase velocity and the impedance is the wave impedance; for a cable it is the
+nominal velocity factor and the characteristic impedance. The speeds are
+nominal — a cable's velocity factor depends on its dielectric, so check the
+datasheet — and each row has a distinct speed so the medium can be recovered
+from it. The **wavelengths** table lists common waves with their vacuum
+frequency and a `uses` note: the visible colours, the UV bands and germicidal
+lamps, the ISM and amateur radio bands, the common IR LED peaks, and the
+thermal-camera LWIR band.
+
+**Speed of light** ties them together. Picking a medium from the wave-media
+table sets the speed of light in it; entering the frequency then gives the
+wavelength (`λ = c/f`), and entering a distance gives the travel time
+(`t = d/c`).
 
 ### Custom calculators
 
@@ -400,10 +481,10 @@ file, so a custom can be shared on a forum and pasted back in. The model
 
 ```ts
 export const CATEGORY_MANIFEST = {
-  basic: {
-    title: 'Basic',
+  electrical: {
+    title: 'Electrical',
     description: 'Everyday electrical calculations.',
-    load: () => import('./categories/basic/index.js'),
+    load: () => import('./categories/electrical/index.js'),
   },
   // ...
 } as const satisfies CategoryManifest;
@@ -415,18 +496,18 @@ uses `calc-custom-hub`). The app renders that element in place of the tile list
 and binds its `handle`, `openCalculator`, and `onChanged` properties.
 
 You can also register a calculator directly at runtime with
-`app.categories.basic.add(definition)`.
+`app.categories.electrical.add(definition)`.
 
 Tables a category exports are registered with it under their `id` and become
 reference data for its calculators: a variable with a `table` field becomes a
 dropdown over that table's rows. Categories that need the same data export
-the same table (the Basic and SPICE categories both ship the inductor and
+the same table (the Electrical and SPICE categories both ship the inductor and
 capacitor model tables), so a shared model only needs defining once.
 
 A table can also be registered as a `TableProvider` — an object with an `id`
 and a `build()` method. The registry builds and validates the table the first
 time something requests it, then caches the result, so large or generated
-tables cost nothing until they are used. The Basic category's E-series
+tables cost nothing until they are used. The Electrical category's E-series
 resistor and capacitor tables are built this way: `e-series.ts` emits every
 E24 value across whole decades, each labelled with the smallest series the
 value belongs to, so 1.5 kΩ reads "1.5k(E6)" and 5.1 kΩ reads "5.1k(E24)".

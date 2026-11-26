@@ -45,6 +45,14 @@ export type ThermalExpansionUnit = '1/K' | '1/°C' | '1/°F';
 /** Units for a dimensionless ratio. */
 export type RatioUnit = '1' | '%';
 
+/**
+ * The decibel, added because the library has no logarithmic measure. It has a
+ * single unit, so it is only ever used to label a value that is already
+ * expressed in decibels (a path loss or an antenna gain); it is not a linear
+ * quantity that converts against anything.
+ */
+export type DecibelUnit = 'dB';
+
 /** Every unit a calculator variable may use. */
 export type UnitSymbol =
   | AllMeasuresUnits
@@ -58,7 +66,8 @@ export type UnitSymbol =
   | ThermalConductivityUnit
   | DynamicViscosityUnit
   | ThermalExpansionUnit
-  | RatioUnit;
+  | RatioUnit
+  | DecibelUnit;
 
 /** Every measurement kind the unit registry understands. */
 export type MeasureName =
@@ -72,7 +81,8 @@ export type MeasureName =
   | 'thermalConductivity'
   | 'dynamicViscosity'
   | 'thermalExpansion'
-  | 'ratio';
+  | 'ratio'
+  | 'decibel';
 
 type SystemName = AllMeasuresSystems;
 
@@ -387,6 +397,17 @@ const ratio: Measure<SystemName, RatioUnit> = {
   },
 };
 
+const decibel: Measure<SystemName, DecibelUnit> = {
+  systems: {
+    SI: {
+      dB: {
+        name: { singular: 'Decibel', plural: 'Decibels' },
+        to_anchor: 1,
+      },
+    },
+  },
+};
+
 const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   ...allMeasures,
   resistance,
@@ -400,6 +421,7 @@ const measures: Record<MeasureName, Measure<SystemName, UnitSymbol>> = {
   dynamicViscosity,
   thermalExpansion,
   ratio,
+  decibel,
 };
 
 const convert = configureMeasurements(measures);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ohmsLaw } from '../categories/basic/ohms-law.js';
+import { ohmsLaw } from '../categories/electrical/ohms-law.js';
 import { StateLoadError } from './errors.js';
 import { missing } from './missing.js';
 import {

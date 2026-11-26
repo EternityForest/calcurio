@@ -1,17 +1,18 @@
 import {
-  calculators as basicCalculators,
-  tables as basicTables,
-} from '../categories/basic/index.js';
+  calculators as electricalCalculators,
+  tables as electricalTables,
+} from '../categories/electrical/index.js';
 import { calculators as conversionCalculators } from '../categories/conversions/index.js';
 import {
   calculators as fluidsCalculators,
   tables as fluidsTables,
 } from '../categories/fluids/index.js';
 import { calculators as mathCalculators } from '../categories/math/index.js';
+import { calculators as mechanicalCalculators } from '../categories/mechanical/index.js';
 import {
-  calculators as wireCalculators,
-  tables as wireTables,
-} from '../categories/wire/index.js';
+  calculators as physicsCalculators,
+  tables as physicsTables,
+} from '../categories/physics/index.js';
 import { CustomDefinitionError } from '../framework/errors.js';
 import { TableRegistry } from '../framework/tables.js';
 import type {
@@ -53,16 +54,17 @@ export class CalculatorCatalog implements TableResolver {
   /** Builds the catalog from the categories the widget ships with. */
   static standard(): CalculatorCatalog {
     const tables: readonly TableSource[] = [
-      ...basicTables,
+      ...electricalTables,
       ...fluidsTables,
-      ...wireTables,
+      ...physicsTables,
     ];
     const catalog = new CalculatorCatalog(new TableRegistry(tables));
-    catalog.register(basicCalculators);
+    catalog.register(electricalCalculators);
     catalog.register(conversionCalculators);
     catalog.register(fluidsCalculators);
     catalog.register(mathCalculators);
-    catalog.register(wireCalculators);
+    catalog.register(mechanicalCalculators);
+    catalog.register(physicsCalculators);
     return catalog;
   }
 

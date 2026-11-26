@@ -2,30 +2,36 @@ import { CalculatorApp } from './framework/app.js';
 import type { CategoryManifest } from './framework/types.js';
 
 export const CATEGORY_MANIFEST = {
-  basic: {
-    title: 'Basic',
+  electrical: {
+    title: 'Electrical',
     description: 'Everyday electrical calculations.',
-    load: () => import('./categories/basic/index.js'),
+    load: () => import('./categories/electrical/index.js'),
   },
   math: {
     title: 'Math',
-    description: 'Add, subtract, multiply, and divide numbers.',
+    description: 'Arithmetic primitives and a general expression evaluator.',
     load: () => import('./categories/math/index.js'),
   },
-  wire: {
-    title: 'Wire',
-    description: 'Wire sizes, conductor metals, and resistance.',
-    load: () => import('./categories/wire/index.js'),
+  mechanical: {
+    title: 'Mechanical',
+    description: 'Cable tension, stored energy, and other mechanical work.',
+    load: () => import('./categories/mechanical/index.js'),
+  },
+  fluids: {
+    title: 'Fluids',
+    description:
+      'Working-fluid properties and flow through pipes and orifices.',
+    load: () => import('./categories/fluids/index.js'),
+  },
+  physics: {
+    title: 'Physics',
+    description: 'Wave propagation and the speed of light in media.',
+    load: () => import('./categories/physics/index.js'),
   },
   spice: {
     title: 'SPICE',
     description: 'Transient circuit simulations run in the browser.',
     load: () => import('./categories/spice/index.js'),
-  },
-  fluids: {
-    title: 'Fluids',
-    description: 'Working-fluid properties and volume-to-weight.',
-    load: () => import('./categories/fluids/index.js'),
   },
   conversions: {
     title: 'Conversions',

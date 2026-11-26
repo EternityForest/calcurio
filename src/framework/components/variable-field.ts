@@ -387,7 +387,11 @@ export class VariableField extends LitElement {
 
   private readonly handleCalculate = (): void => {
     this.cancelTimer();
-    if (this.model?.kind === 'tableSelect') {
+    const model = this.model;
+    if (model === undefined) {
+      return;
+    }
+    if (model.kind === 'tableSelect' || !model.editable) {
       this.onCalculate();
       return;
     }

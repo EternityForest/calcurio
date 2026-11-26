@@ -138,7 +138,9 @@ describe('BookmarksDialog', () => {
     button.click();
     await element.updateComplete;
 
-    expect(load).toHaveBeenCalledWith(bookmark.state, bookmark.units);
+    expect(load).toHaveBeenCalledWith(bookmark.state, bookmark.units, {
+      includeDerived: false,
+    });
     expect(event).toHaveBeenCalled();
     expect(modalOf(element).open).toBe(false);
   });

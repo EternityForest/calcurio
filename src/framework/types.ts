@@ -44,6 +44,12 @@ export interface VariableBase {
   readonly hidden?: boolean;
   /** Explanation shown under the field. */
   readonly description?: string;
+  /**
+   * Whether the value should update automatically when its inputs change.
+   * Defaults to true. When false, the value only changes when the user presses
+   * Calculate on the field.
+   */
+  readonly autoUpdate?: boolean;
   /** Returns a message (or messages) when the value is not acceptable. */
   readonly validate?: (
     state: Readonly<CalcState>,
@@ -297,6 +303,11 @@ export interface CalculatorDefinition {
   readonly id: string;
   readonly title: string;
   readonly description?: string;
+  /**
+   * Arbitrary HTML shown in the page heading after the description. Use it for
+   * attribution links or other small notes.
+   */
+  readonly headerHtml?: string;
   /** Variables for the default config. */
   readonly variables: readonly VariableDefinition[];
   /** Settings a caller may adjust before the variable list is built. */

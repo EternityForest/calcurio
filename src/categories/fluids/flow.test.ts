@@ -3,6 +3,7 @@ import { CalculatorRuntime } from '../../framework/runtime.js';
 import { assertCalculatorTests } from '../../framework/testing.js';
 import { orificeFlow } from './orifice-flow.js';
 import { pipeFlow } from './pipe-flow.js';
+import { pressureAreaForce } from './pressure-area-force.js';
 
 function number(value: unknown): number {
   if (typeof value !== 'number') {
@@ -68,5 +69,30 @@ describe('Pipe flow', () => {
     calc.setDisplayText('velocity', '2');
     calc.calculate('diameter');
     expect(number(calc.state['diameter'])).toBeCloseTo(50, 9);
+  });
+});
+
+describe('Pressure, area, and force', () => {
+  it('passes every definition test case', () => {
+    expect(() => assertCalculatorTests(pressureAreaForce)).not.toThrow();
+  });
+
+  it('computes force from pressure and area', () => {
+    const calc = new CalculatorRuntime(pressureAreaForce);
+    calc.setDisplayUnit('pressure', 'Pa');
+    calc.setDisplayUnit('area', 'm2');
+    calc.setDisplayText('pressure', '100');
+    calc.setDisplayText('area', '0.01');
+    expect(number(calc.state['force'])).toBeCloseTo(1, 9);
+  });
+
+  it('solves pressure from force and area', () => {
+    const calc = new CalculatorRuntime(pressureAreaForce);
+    calc.setDisplayUnit('pressure', 'Pa');
+    calc.setDisplayUnit('area', 'm2');
+    calc.setDisplayText('force', '1000');
+    calc.setDisplayText('area', '0.01');
+    calc.calculate('pressure');
+    expect(number(calc.state['pressure'])).toBeCloseTo(100000, 9);
   });
 });

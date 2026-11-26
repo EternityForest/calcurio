@@ -209,6 +209,8 @@ export class CalculatorRuntime {
 
   private values: CalcState = {};
   private pinnedNames = new Set<string>();
+  /** Variables whose `autoUpdate: false` is overridden for one calculation. */
+  private forceNames = new Set<string>();
   private order: string[] = [];
   private lastTouchedName: string | null = null;
   private converged = true;
@@ -258,6 +260,7 @@ export class CalculatorRuntime {
     this.configValues = next;
     this.variableList = buildVariableList(this.definition, next);
     this.bindVariables();
+    this.forceNames.clear();
     this.recompute();
   }
 
@@ -688,7 +691,12 @@ export class CalculatorRuntime {
       }
     }
     this.pinnedNames = pinned;
-    this.recompute();
+    this.forceNames.add(name);
+    try {
+      this.recompute();
+    } finally {
+      this.forceNames.delete(name);
+    }
   }
 
   /**
@@ -767,6 +775,9 @@ export class CalculatorRuntime {
         if (this.pinnedNames.has(name) || !this.isRecalcVariable(name)) {
           continue;
         }
+        if (!this.shouldAutoUpdate(name)) {
+          continue;
+        }
         if (this.computeVariable(name)) {
           restart = true;
         }
@@ -814,6 +825,7 @@ export class CalculatorRuntime {
       }
     }
     this.pinnedNames = new Set();
+    this.forceNames.clear();
     this.applyTableDefaults();
     this.order = [...this.derivedNames];
     this.lastTouchedName = null;
@@ -827,8 +839,10 @@ export class CalculatorRuntime {
   loadState(
     state: CalcState,
     units?: Readonly<Record<string, UnitSymbol>>,
+    options?: { readonly includeDerived?: boolean },
   ): void {
-    this.assertValidState(state);
+    const includeDerived = options?.includeDerived !== false;
+    this.assertValidState(state, includeDerived);
     this.cancelComputeState();
     this.clearDisplay();
 
@@ -860,25 +874,49 @@ export class CalculatorRuntime {
       }
     }
 
-    this.values = { ...state };
+    const nextValues: CalcState = {};
+    for (const variable of this.variableList) {
+      nextValues[variable.name] = this.initialValue(variable);
+    }
+    for (const [name, value] of Object.entries(state)) {
+      if (!includeDerived && !this.isEditable(name)) {
+        continue;
+      }
+      nextValues[name] = value;
+    }
+    this.values = nextValues;
     this.displayUnits.clear();
     for (const [name, unit] of displayUnits) {
       this.displayUnits.set(name, unit);
     }
     this.pinnedNames = new Set(
       Object.entries(this.values)
-        .filter(([, value]) => value !== null)
+        .filter(
+          ([name, value]) =>
+            value !== null && (includeDerived || this.isEditable(name)),
+        )
         .map(([name]) => name),
     );
+    this.forceNames.clear();
     this.order = [...this.derivedNames];
     this.lastTouchedName = null;
     this.recompute();
   }
 
-  /** Captures the current values and display units for bookmarking. */
+  /**
+   * Captures the current values and display units for bookmarking. Only
+   * editable values are saved; non-editable values are recomputed on load.
+   */
   snapshot(): CalculatorSnapshot {
+    const state: CalcState = {};
+    for (const variable of this.variableList) {
+      if (!this.isEditable(variable.name)) {
+        continue;
+      }
+      state[variable.name] = this.values[variable.name] ?? null;
+    }
     return {
-      state: { ...this.values },
+      state,
       units: Object.fromEntries(this.displayUnits),
     };
   }
@@ -1176,6 +1214,16 @@ export class CalculatorRuntime {
     );
   }
 
+  /**
+   * True when a derived variable may update during automatic recomputation.
+   * A variable with `autoUpdate: false` only updates when its Calculate button
+   * is pressed, which records it in `forceNames` for the run.
+   */
+  private shouldAutoUpdate(name: string): boolean {
+    const variable = this.requireVariable(name);
+    return variable.autoUpdate !== false || this.forceNames.has(name);
+  }
+
   /** True for a variable solved from the state by a `computable` function. */
   private isRecalcVariable(name: string): boolean {
     const variable = this.requireVariable(name);
@@ -1293,6 +1341,9 @@ export class CalculatorRuntime {
         if (this.pinnedNames.has(name) || !this.isTableDerived(name)) {
           continue;
         }
+        if (!this.shouldAutoUpdate(name)) {
+          continue;
+        }
         if (this.computeVariable(name)) {
           restart = true;
         }
@@ -1343,6 +1394,9 @@ export class CalculatorRuntime {
         if (target === undefined) {
           continue;
         }
+        if (!this.shouldAutoUpdate(targetName)) {
+          continue;
+        }
         let next: number;
         try {
           next = convert(value);
@@ -1381,6 +1435,9 @@ export class CalculatorRuntime {
       }
       const source = this.variablesByName.get(sourceName);
       if (source === undefined) {
+        continue;
+      }
+      if (!this.shouldAutoUpdate(variable.name)) {
         continue;
       }
       const raw = this.values[sourceName] ?? null;
@@ -1975,7 +2032,7 @@ export class CalculatorRuntime {
     this.issues = issues;
   }
 
-  private assertValidState(state: CalcState): void {
+  private assertValidState(state: CalcState, includeDerived: boolean): void {
     if (typeof state !== 'object' || state === null || Array.isArray(state)) {
       throw new StateLoadError('Saved state must be an object.');
     }
@@ -1986,9 +2043,16 @@ export class CalculatorRuntime {
     }
     for (const variable of this.variableList) {
       if (!Object.hasOwn(state, variable.name)) {
-        throw new StateLoadError(
-          `Saved state is missing variable "${variable.name}".`,
-        );
+        if (includeDerived || this.isEditable(variable.name)) {
+          throw new StateLoadError(
+            `Saved state is missing variable "${variable.name}".`,
+          );
+        }
+        continue;
+      }
+      if (!includeDerived && !this.isEditable(variable.name)) {
+        // Non-editable values are not saved and are ignored when present.
+        continue;
       }
       const value = state[variable.name] ?? null;
       if (value === null) {

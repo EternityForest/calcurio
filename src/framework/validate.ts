@@ -46,6 +46,12 @@ export function validateCalculatorDefinition(
   if (definition.title.trim() === '') {
     problems.push('title must not be empty.');
   }
+  if (
+    definition.headerHtml !== undefined &&
+    typeof definition.headerHtml !== 'string'
+  ) {
+    problems.push('headerHtml must be a string.');
+  }
   if (definition.variables.length === 0) {
     problems.push('at least one variable is required.');
   }
@@ -127,6 +133,12 @@ function variableProblems(variables: readonly VariableDefinition[]): string[] {
     }
     if (variable.input !== undefined && typeof variable.input !== 'boolean') {
       problems.push(`${where}: input must be a boolean.`);
+    }
+    if (
+      variable.autoUpdate !== undefined &&
+      typeof variable.autoUpdate !== 'boolean'
+    ) {
+      problems.push(`${where}: autoUpdate must be a boolean.`);
     }
     if (variable.hidden !== undefined && typeof variable.hidden !== 'boolean') {
       problems.push(`${where}: hidden must be a boolean.`);

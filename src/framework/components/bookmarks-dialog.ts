@@ -283,7 +283,9 @@ export class BookmarksDialog extends LitElement {
       return;
     }
     try {
-      runtime.loadState(bookmark.state, bookmark.units);
+      runtime.loadState(bookmark.state, bookmark.units, {
+        includeDerived: false,
+      });
     } catch (error) {
       this.error = errorMessage(error);
       this.requestUpdate();

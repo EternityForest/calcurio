@@ -12,6 +12,11 @@ export const CATEGORY_MANIFEST = {
     description: 'Arithmetic primitives and a general expression evaluator.',
     load: () => import('./categories/math/index.js'),
   },
+  geometry: {
+    title: 'Geometry',
+    description: 'Circles, spheres, and right-triangle geometry.',
+    load: () => import('./categories/geometry/index.js'),
+  },
   mechanical: {
     title: 'Mechanical',
     description: 'Cable tension, stored energy, and other mechanical work.',
@@ -44,6 +49,16 @@ export const CATEGORY_MANIFEST = {
     title: 'Conversions',
     description: 'Everyday unit conversions between equivalent measures.',
     load: () => import('./categories/conversions/index.js'),
+  },
+  random: {
+    title: 'Random',
+    description: 'UUIDs, random numbers, and random choices.',
+    load: () => import('./categories/random/index.js'),
+  },
+  finance: {
+    title: 'Finance',
+    description: 'Currency conversion with live exchange rates.',
+    load: () => import('./categories/finance/index.js'),
   },
   custom: {
     title: 'Custom',

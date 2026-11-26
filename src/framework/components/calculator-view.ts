@@ -1,6 +1,7 @@
 import { html, LitElement, nothing } from 'lit';
 import type { PropertyValues, TemplateResult } from 'lit';
 import { ref } from 'lit/directives/ref.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import type { BookmarkStore } from '../bookmarks.js';
 import { errorMessage } from '../errors.js';
 import type { OutputDisplayItem } from '../output.js';
@@ -83,6 +84,13 @@ export class CalculatorView extends LitElement {
           definition.description === undefined
             ? nothing
             : html`<p class="help">${definition.description}</p>`
+        }
+        ${
+          definition.headerHtml === undefined
+            ? nothing
+            : html`<div class="calc-header-html">
+                ${unsafeHTML(definition.headerHtml)}
+              </div>`
         }
         ${this.renderConfig(runtime)} ${this.renderErrors(runtime)}
         <div class="calc-fields">

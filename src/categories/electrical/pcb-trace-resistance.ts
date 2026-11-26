@@ -29,13 +29,13 @@ export const pcbTraceResistance: CalculatorDefinition = {
     {
       name: 'widthMils',
       label: 'Width',
-      unit: 'mils',
+      unit: 'mm',
       description: 'Trace width in mils (1 mil = 0.001 inch).',
     },
     {
       name: 'thicknessOz',
       label: 'Copper thickness',
-      unit: 'oz',
+      unit: 'mm',
       description: 'Copper weight in ounces (1 oz ≈ 1.378 mils thick).',
     },
     {

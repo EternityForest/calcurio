@@ -20,7 +20,7 @@ import {
   rowLabel,
   rowMatchesFilter,
 } from './tables.js';
-import { interpolateAt, parseLookupCell } from './interpolate.js';
+import { interpolateLookup, lookupCellOf } from './interpolate.js';
 import type {
   CalcState,
   CalcValue,
@@ -43,6 +43,7 @@ import {
   isTableFieldVariable,
   isTableSelectVariable,
   isTextVariable,
+  tableAxisNames,
 } from './types.js';
 import { isUnchanged } from './unchanged.js';
 import {
@@ -108,6 +109,17 @@ interface TableSelectBinding {
   readonly table: TableDefinition;
 }
 
+/**
+ * One axis of a lookup column, in the order the column's composite unit lists
+ * them. `variable` names the numeric variable that supplies the axis value, or
+ * null when only the column's `standard` applies.
+ */
+interface LookupAxisBinding {
+  readonly variable: string | null;
+  readonly unit: UnitSymbol;
+  readonly standard: number | null;
+}
+
 interface TableFieldBinding {
   readonly variable: NumberVariableDefinition;
   readonly table: TableDefinition;
@@ -115,12 +127,11 @@ interface TableFieldBinding {
   readonly columnUnit: UnitSymbol;
   readonly selectName: string;
   /**
-   * Axis metadata for a lookup column. The axis variable supplies the value
-   * that is interpolated against the column's sampled pairs.
+   * Axis metadata for a lookup column. Each axis supplies the coordinate that
+   * is interpolated against the column's sampled points.
    */
   readonly lookup?: {
-    readonly axisVariable: string;
-    readonly axisUnit: UnitSymbol;
+    readonly axes: readonly LookupAxisBinding[];
   };
 }
 
@@ -983,40 +994,25 @@ export class CalculatorRuntime {
               'without a composite unit such as "kg/m3@°C".',
           );
         }
-        const axisName = variable.tableAxis;
-        if (axisName === undefined) {
-          throw new CalculatorDefinitionError(
-            `${variable.label} references lookup column "${fieldKey}" but ` +
-              'does not name a tableAxis.',
-          );
-        }
-        const axisVariable = this.variablesByName.get(axisName);
-        if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
-          throw new CalculatorDefinitionError(
-            `${variable.label} names unknown numeric tableAxis "${axisName}".`,
-          );
-        }
-        if (measureOf(axisVariable.unit) !== measureOf(composite.axis)) {
-          throw new CalculatorDefinitionError(
-            `${variable.label} axis "${axisName}" uses ` +
-              `"${axisVariable.unit}" but column "${fieldKey}" expects ` +
-              `"${composite.axis}".`,
-          );
-        }
         if (measureOf(composite.unit) !== measureOf(variable.unit)) {
           throw new CalculatorDefinitionError(
             `${variable.label} uses "${variable.unit}" but column ` +
               `"${fieldKey}" uses "${composite.unit}".`,
           );
         }
-
+        const axes = this.lookupAxes(
+          variable,
+          fieldKey,
+          composite.axes,
+          column,
+        );
         const binding: TableFieldBinding = {
           variable,
           table: select.table,
           column,
           columnUnit: composite.unit,
           selectName,
-          lookup: { axisVariable: axisName, axisUnit: composite.axis },
+          lookup: { axes },
         };
         this.tableFields.set(variable.name, binding);
         const siblings = this.tableFieldsBySelect.get(selectName) ?? [];
@@ -1194,6 +1190,94 @@ export class CalculatorRuntime {
       this.tableFields.get(name) === undefined &&
       variable.computable !== undefined
     );
+  }
+
+  /**
+   * Resolves the axes of a lookup column against a variable's `tableAxis`
+   * names and the column's `standards`. Each declared name is matched to an
+   * axis of the same measure; every remaining axis must have a standard.
+   */
+  private lookupAxes(
+    variable: NumberVariableDefinition,
+    fieldKey: string,
+    axisUnits: readonly UnitSymbol[],
+    column: TableColumn,
+  ): readonly LookupAxisBinding[] {
+    const standards = column.standards ?? {};
+    const axes: LookupAxisBinding[] = axisUnits.map((unit) => {
+      const standard = standards[unit];
+      return {
+        variable: null,
+        unit,
+        standard: typeof standard === 'number' ? standard : null,
+      };
+    });
+
+    const taken = new Set<number>();
+    for (const axisName of tableAxisNames(variable)) {
+      const axisVariable = this.variablesByName.get(axisName);
+      if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} names unknown numeric tableAxis "${axisName}".`,
+        );
+      }
+      const measure = measureOf(axisVariable.unit);
+      const index = axes.findIndex(
+        (axis, position) =>
+          !taken.has(position) && measureOf(axis.unit) === measure,
+      );
+      if (index === -1) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} axis "${axisName}" uses "${axisVariable.unit}" ` +
+            `but column "${fieldKey}" has no matching axis.`,
+        );
+      }
+      taken.add(index);
+      axes[index] = { ...axes[index]!, variable: axisName };
+    }
+
+    for (const axis of axes) {
+      if (axis.variable === null && axis.standard === null) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} does not supply axis "${axis.unit}" of column ` +
+            `"${fieldKey}" and the column declares no standard for it.`,
+        );
+      }
+    }
+    return axes;
+  }
+
+  /**
+   * Query coordinates and standards for a lookup binding, one entry per axis.
+   * A coordinate is the axis variable's current value converted to the axis
+   * unit, or null when the variable has none. `useStandardsForAll` ignores the
+   * variables and reports the standard point instead, which is how a
+   * multi-axis column is ranked when finding a closest row.
+   */
+  private lookupQuery(
+    binding: TableFieldBinding,
+    useStandardsForAll: boolean,
+  ): { coords: (number | null)[]; standards: (number | null)[] } {
+    const coords: (number | null)[] = [];
+    const standards: (number | null)[] = [];
+    for (const axis of binding.lookup?.axes ?? []) {
+      standards.push(axis.standard);
+      const name = axis.variable;
+      const value = name === null ? undefined : this.values[name];
+      const source = name === null ? undefined : this.variablesByName.get(name);
+      if (
+        !useStandardsForAll &&
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
+        source !== undefined &&
+        isNumberVariable(source)
+      ) {
+        coords.push(convertUnit(value, source.unit, axis.unit));
+      } else {
+        coords.push(null);
+      }
+    }
+    return { coords, standards };
   }
 
   /**
@@ -1485,37 +1569,24 @@ export class CalculatorRuntime {
   /**
    * Value a row offers a field in the field's base unit, or null when the row
    * has no usable value. Unlike `deriveTableFieldValue` this reports nothing;
-   * it is used to rank candidate rows before one is chosen.
+   * it is used to rank candidate rows before one is chosen. A multi-axis
+   * lookup is read at the standard point, because its axes cannot be inverted
+   * from a single value; a one-axis lookup is read at its variable's value.
    */
   private rowFieldValue(
     binding: TableFieldBinding,
     row: TableRow,
   ): number | null {
     if (binding.lookup !== undefined) {
-      const axisVariable = this.variablesByName.get(
-        binding.lookup.axisVariable,
+      const cell = lookupCellOf(row[binding.column.key]);
+      if (cell === null) {
+        return null;
+      }
+      const { coords, standards } = this.lookupQuery(
+        binding,
+        binding.lookup.axes.length >= 2,
       );
-      if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
-        return null;
-      }
-      const axisValue = this.values[binding.lookup.axisVariable];
-      if (typeof axisValue !== 'number' || !Number.isFinite(axisValue)) {
-        return null;
-      }
-      const text = row[binding.column.key];
-      if (typeof text !== 'string' || text.trim() === '') {
-        return null;
-      }
-      const points = parseLookupCell(text);
-      if (points === null) {
-        return null;
-      }
-      const axis = convertUnit(
-        axisValue,
-        axisVariable.unit,
-        binding.lookup.axisUnit,
-      );
-      const sampled = interpolateAt(points, axis);
+      const sampled = interpolateLookup(cell, coords, standards);
       if (sampled === null) {
         return null;
       }
@@ -1532,12 +1603,19 @@ export class CalculatorRuntime {
   /**
    * Brute-force search for the single row matching every referencing field
    * that currently has a value. No matches or several matches select nothing.
+   * A lookup field that varies with another variable is skipped: its cell
+   * cannot be inverted from a single value. One that reads only at its
+   * standard point (no axis variable) still identifies a row.
    */
   private deriveSelectionKey(binding: TableSelectBinding): string | null {
     const constraints = (
       this.tableFieldsBySelect.get(binding.variable.name) ?? []
     )
-      .filter((field) => field.lookup === undefined)
+      .filter(
+        (field) =>
+          field.lookup === undefined ||
+          field.lookup.axes.every((axis) => axis.variable === null),
+      )
       .map((field) => ({
         field,
         value: this.values[field.variable.name],
@@ -1555,16 +1633,8 @@ export class CalculatorRuntime {
         return false;
       }
       return constraints.every(({ field, value }) => {
-        const cell = numericCell(row[field.column.key]);
-        if (cell === null) {
-          return false;
-        }
-        const converted = convertUnit(
-          value,
-          field.variable.unit,
-          field.columnUnit,
-        );
-        return nearlyEqual(cell, converted);
+        const candidate = this.rowFieldValue(field, row);
+        return candidate !== null && nearlyEqual(candidate, value);
       });
     });
     if (matches.length !== 1) {
@@ -1592,32 +1662,15 @@ export class CalculatorRuntime {
     }
 
     if (binding.lookup !== undefined) {
-      const axisVariable = this.variablesByName.get(
-        binding.lookup.axisVariable,
-      );
-      if (axisVariable === undefined || !isNumberVariable(axisVariable)) {
+      const cell = lookupCellOf(row[binding.column.key]);
+      if (cell === null) {
+        this.addError(
+          `${binding.column.label} is empty or malformed for row "${key}".`,
+        );
         return null;
       }
-      const axisValue = this.values[binding.lookup.axisVariable];
-      if (typeof axisValue !== 'number' || !Number.isFinite(axisValue)) {
-        return null;
-      }
-      const text = row[binding.column.key];
-      if (typeof text !== 'string' || text.trim() === '') {
-        this.addError(`${binding.column.label} is empty for row "${key}".`);
-        return null;
-      }
-      const points = parseLookupCell(text);
-      if (points === null) {
-        this.addError(`${binding.column.label} is malformed for row "${key}".`);
-        return null;
-      }
-      const axis = convertUnit(
-        axisValue,
-        axisVariable.unit,
-        binding.lookup.axisUnit,
-      );
-      const sampled = interpolateAt(points, axis);
+      const { coords, standards } = this.lookupQuery(binding, false);
+      const sampled = interpolateLookup(cell, coords, standards);
       if (sampled === null) {
         this.addError(
           `${binding.column.label} cannot be interpolated for row "${key}".`,

@@ -13,6 +13,7 @@ import {
   isTableFieldVariable,
   isTableSelectVariable,
   isTextVariable,
+  tableAxisNames,
 } from './types.js';
 import { isUnchanged } from './unchanged.js';
 import { measureOf, tryDescribeUnit } from './units.js';
@@ -96,9 +97,7 @@ export function validateVariableList(
 }
 
 /** Collects every problem in a variable list without throwing. */
-function variableProblems(
-  variables: readonly VariableDefinition[],
-): string[] {
+function variableProblems(variables: readonly VariableDefinition[]): string[] {
   const problems: string[] = [];
   const variablesByName = indexByName(variables);
   const seen = new Set<string>();
@@ -364,7 +363,10 @@ function validateConfigField(
 ): void {
   switch (field.kind) {
     case 'number':
-      if (typeof field.default !== 'number' || !Number.isFinite(field.default)) {
+      if (
+        typeof field.default !== 'number' ||
+        !Number.isFinite(field.default)
+      ) {
         problems.push(`${where}: default must be a finite number.`);
       }
       if (field.options !== undefined) {
@@ -401,7 +403,10 @@ function validateConfigField(
       } else if (new Set(options).size !== options.length) {
         problems.push(`${where}: select options must be unique.`);
       }
-      if (typeof field.default !== 'string' || !options.includes(field.default)) {
+      if (
+        typeof field.default !== 'string' ||
+        !options.includes(field.default)
+      ) {
         problems.push(`${where}: default must be one of the options.`);
       }
       return;
@@ -438,7 +443,9 @@ function validateTestCase(
     }
     if (isTableSelectVariable(variable)) {
       if (typeof value !== 'string') {
-        problems.push(`${where}: "${variable.name}" must be a row key or null.`);
+        problems.push(
+          `${where}: "${variable.name}" must be a row key or null.`,
+        );
       }
       continue;
     }
@@ -591,11 +598,11 @@ function validateNumberVariable(
   if (hasField && variable.tableField === '') {
     problems.push(`${where}: tableField must not be empty.`);
   }
-  if (
-    variable.tableAxis !== undefined &&
-    (typeof variable.tableAxis !== 'string' || variable.tableAxis === '')
-  ) {
-    problems.push(`${where}: tableAxis must be a non-empty variable name.`);
+  if (variable.tableAxis !== undefined) {
+    const axes = tableAxisNames(variable);
+    if (axes.length === 0 || axes.some((name) => name === '')) {
+      problems.push(`${where}: tableAxis must name at least one variable.`);
+    }
   }
   if (variable.tableAxis !== undefined && !hasField) {
     problems.push(`${where}: tableAxis requires tableField.`);

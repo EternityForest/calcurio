@@ -187,20 +187,21 @@ export class TableView extends LitElement {
     row: TableRow,
   ): TemplateResult {
     const cell = row[column.key];
-    if (
-      isLookupColumn(column) &&
-      typeof cell === 'string' &&
-      cell.trim() !== ''
-    ) {
+    if (isLookupColumn(column) && hasLookupValue(cell)) {
       return html`
-        <td class="calc-table-lookup-cell">
-          <span>${cell}</span>
+        <td>
+          <span class="truncate max-w-8rem">${renderCell(column, cell)}</span>
           <button
             class="button calc-table-lookup-button"
             type="button"
             title=${`Look up ${column.label}`}
             data-testid=${`lookup-${column.key}-${row[table.keyColumn]}`}
-            @click=${() => this.openLookup(column, cell, rowLabel(table, row))}
+            @click=${() =>
+              this.openLookup(
+                column,
+                lookupCellText(cell),
+                rowLabel(table, row),
+              )}
           >
             Look up
           </button>
@@ -441,10 +442,29 @@ function renderCell(
   if (isBooleanColumn(column) && typeof cell === 'boolean') {
     return cell ? 'yes' : 'no';
   }
-  if (isNumericColumn(column) && typeof cell === 'number') {
+  if (
+    (isNumericColumn(column) || isLookupColumn(column)) &&
+    typeof cell === 'number'
+  ) {
     return formatNumber(cell);
   }
   return String(cell);
+}
+
+/** Whether a lookup cell holds something a user can open the dialog for. */
+function hasLookupValue(cell: TableCell | undefined): boolean {
+  if (typeof cell === 'number') {
+    return Number.isFinite(cell);
+  }
+  return typeof cell === 'string' && cell.trim() !== '';
+}
+
+/** The lookup cell as text the dialog can parse; numbers become fallbacks. */
+function lookupCellText(cell: TableCell | undefined): string {
+  if (typeof cell === 'number') {
+    return String(cell);
+  }
+  return typeof cell === 'string' ? cell : '';
 }
 
 customElements.define('calc-table-view', TableView);

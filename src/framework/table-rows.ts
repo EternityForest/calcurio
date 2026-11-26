@@ -1,7 +1,7 @@
 import type { KeyValueStorage } from './bookmarks.js';
 import { TableRowsStorageError, errorMessage } from './errors.js';
 import { formatNumber, parseNumberText } from './format.js';
-import { parseLookupCell } from './interpolate.js';
+import { lookupCellOf } from './interpolate.js';
 import {
   isBooleanColumn,
   isLookupColumn,
@@ -374,7 +374,10 @@ function formatCell(column: TableColumn, cell: TableCell | undefined): string {
   if (isBooleanColumn(column) && typeof cell === 'boolean') {
     return cell ? 'yes' : 'no';
   }
-  if (isNumericColumn(column) && typeof cell === 'number') {
+  if (
+    (isNumericColumn(column) || isLookupColumn(column)) &&
+    typeof cell === 'number'
+  ) {
     return formatNumber(cell);
   }
   return escapeCell(String(cell));
@@ -406,10 +409,14 @@ function coerceCell(column: TableColumn, text: string): TableCell {
     }
   }
   if (isLookupColumn(column)) {
-    if (parseLookupCell(trimmed) === null) {
+    const cell = lookupCellOf(trimmed);
+    if (cell === null) {
       throw invalid(`"${trimmed}" is not a lookup value.`);
     }
-    return trimmed;
+    // A plain number is stored as a number so it reads as the fallback value.
+    return cell.points.length === 0 && cell.fallback !== null
+      ? cell.fallback
+      : trimmed;
   }
   return trimmed;
 }

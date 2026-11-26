@@ -517,27 +517,41 @@ export function isUnitSymbol(value: string): value is UnitSymbol {
 }
 
 /**
- * Splits a composite unit such as `kg/m3@°C` into the value unit and the axis
- * unit. Returns null when either part is not a known unit.
+ * Splits a composite unit such as `kg/m3@°C` or `kg/m3@°C,kPa` into the value
+ * unit and the axis units. Returns null when the value unit or any axis unit
+ * is not a known unit.
  */
 export function parseCompositeUnit(
   unit: string,
-): { readonly unit: UnitSymbol; readonly axis: UnitSymbol } | null {
+): { readonly unit: UnitSymbol; readonly axes: readonly UnitSymbol[] } | null {
   const at = unit.indexOf('@');
   if (at <= 0 || at === unit.length - 1) {
     return null;
   }
   const valueUnit = unit.slice(0, at);
-  const axisUnit = unit.slice(at + 1);
-  if (!isUnitSymbol(valueUnit) || !isUnitSymbol(axisUnit)) {
+  if (!isUnitSymbol(valueUnit)) {
     return null;
   }
-  return { unit: valueUnit, axis: axisUnit };
+  const axes: UnitSymbol[] = [];
+  for (const part of unit.slice(at + 1).split(',')) {
+    const axisUnit = part.trim();
+    if (!isUnitSymbol(axisUnit)) {
+      return null;
+    }
+    axes.push(axisUnit);
+  }
+  if (axes.length === 0) {
+    return null;
+  }
+  return { unit: valueUnit, axes };
 }
 
-/** Joins a value unit and an axis unit into a composite unit. */
-export function compositeUnit(value: UnitSymbol, axis: UnitSymbol): string {
-  return `${value}@${axis}`;
+/** Joins a value unit and one or more axis units into a composite unit. */
+export function compositeUnit(
+  value: UnitSymbol,
+  ...axes: readonly UnitSymbol[]
+): string {
+  return `${value}@${axes.join(',')}`;
 }
 
 /**

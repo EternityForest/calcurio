@@ -1083,6 +1083,84 @@ function thermalDefinition(): CalculatorDefinition {
   };
 }
 
+/**
+ * A table whose density is a lookup sampled against temperature and pressure,
+ * with a standard for each axis, used to check two-dimensional lookups.
+ */
+const densityTable: TableDefinition = {
+  id: 'density',
+  title: 'Density',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    {
+      key: 'density',
+      label: 'Density',
+      unit: 'kg/m3@°C,kPa',
+      kind: 'lookup',
+      standards: { '°C': 20, kPa: 101.325 },
+    },
+  ],
+  rows: [
+    { id: 'water', label: 'Water', density: '998@20,101.325; 1000@0,101.325' },
+    { id: 'brine', label: 'Brine', density: '1100@20,101.325; 1110@0,101.325' },
+  ],
+};
+
+/**
+ * A two-axis table whose rows cross one another, so a ranking at the standard
+ * point picks a different row than a ranking at the axis value would.
+ */
+const crossingDensityTable: TableDefinition = {
+  ...densityTable,
+  rows: [
+    { id: 'water', label: 'Water', density: '998@20,101.325; 500@0,101.325' },
+    { id: 'brine', label: 'Brine', density: '1100@20,101.325; 1050@0,101.325' },
+  ],
+};
+
+/** A definition whose density is read against the temperature axis. */
+function densityDefinition(table: TableDefinition): CalculatorDefinition {
+  return {
+    id: 'density',
+    title: 'Density',
+    variables: [
+      { name: 'material', label: 'Material', table: table.id },
+      { name: 'temperature', label: 'Temperature', unit: '°C', default: 20 },
+      {
+        name: 'density',
+        label: 'Density',
+        unit: 'kg/m3',
+        tableSelect: 'material',
+        tableField: 'density',
+        tableAxis: 'temperature',
+      },
+    ],
+  };
+}
+
+/** A definition whose density reads only at the column's standard point. */
+function standardDensityDefinition(
+  table: TableDefinition,
+): CalculatorDefinition {
+  return {
+    id: 'density',
+    title: 'Density',
+    variables: [
+      { name: 'material', label: 'Material', table: table.id },
+      {
+        name: 'density',
+        label: 'Density',
+        unit: 'kg/m3',
+        tableSelect: 'material',
+        tableField: 'density',
+      },
+    ],
+  };
+}
+
 describe('CalculatorRuntime findClosestRow', () => {
   function runtime(): CalculatorRuntime {
     return new CalculatorRuntime(
@@ -1156,5 +1234,49 @@ describe('CalculatorRuntime findClosestRow', () => {
 
     expect(calc.canFindClosestRow('shape')).toBe(false);
     expect(() => calc.findClosestRow('shape')).toThrow(/read-only/);
+  });
+});
+
+describe('CalculatorRuntime two-dimensional lookups', () => {
+  it('interpolates a two-axis lookup at the axis value and the standard', () => {
+    const calc = new CalculatorRuntime(
+      densityDefinition(densityTable),
+      new TableRegistry([densityTable]),
+    );
+    calc.setSelection('material', 'water');
+    calc.setDisplayText('temperature', '10');
+    expect(calc.state['density']).toBeCloseTo(999, 6);
+  });
+
+  it('reads a standards-only lookup at its standard point', () => {
+    const calc = new CalculatorRuntime(
+      standardDensityDefinition(densityTable),
+      new TableRegistry([densityTable]),
+    );
+    calc.setSelection('material', 'water');
+    expect(calc.state['density']).toBeCloseTo(998, 6);
+  });
+
+  it('derives the row from a standards-only lookup column', () => {
+    const calc = new CalculatorRuntime(
+      standardDensityDefinition(densityTable),
+      new TableRegistry([densityTable]),
+    );
+    calc.setDisplayText('density', '1100');
+    expect(calc.state['material']).toBe('brine');
+  });
+
+  it('ranks a two-axis lookup at its standard point', () => {
+    const calc = new CalculatorRuntime(
+      densityDefinition(crossingDensityTable),
+      new TableRegistry([crossingDensityTable]),
+    );
+    // At the standard point water reads 998 and brine 1100, so 1040 is closest
+    // to water. Read at the axis value (0 °C) water would be 500 and brine
+    // 1050, which would pick brine instead.
+    calc.setDisplayText('temperature', '0');
+    calc.setDisplayText('density', '1040');
+    expect(calc.canFindClosestRow('material')).toBe(true);
+    expect(calc.findClosestRow('material')).toBe('water');
   });
 });

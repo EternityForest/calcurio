@@ -57,6 +57,27 @@ describe('materials table', () => {
     expect(water.heatOfFusion).toBe(334000);
     expect(water.heatOfVaporization).toBe(2256000);
   });
+
+  it('declares density as a two-axis lookup with standards', () => {
+    const density = materialsTable.columns.find(
+      (column) => column.key === 'density',
+    );
+    expect(density?.kind).toBe('lookup');
+    expect(density?.unit).toBe('kg/m3@°C,kPa');
+    expect(density?.standards).toEqual({ '°C': 20, kPa: 101.325 });
+  });
+
+  it('declares a standard temperature for the specific-heat lookup', () => {
+    const specificHeat = materialsTable.columns.find(
+      (column) => column.key === 'specificHeat',
+    );
+    expect(specificHeat?.kind).toBe('lookup');
+    expect(specificHeat?.standards).toEqual({ '°C': 20 });
+  });
+
+  it('reads a plain numeric density as its standard-point fallback', () => {
+    expect(material('water').density).toBeCloseTo(998.2, 6);
+  });
 });
 
 describe('specificHeatAt', () => {

@@ -9,10 +9,17 @@ import type {
   CalcState,
   CalcValue,
   CalculatorDefinition,
+  NumberVariableDefinition,
   TableResolver,
+  TableSelectVariableDefinition,
   VariableDefinition,
 } from './types.js';
-import { isNumberVariable, isTableSelectVariable } from './types.js';
+import {
+  isNumberVariable,
+  isTableSelectVariable,
+  tableAxisNames,
+} from './types.js';
+import { findColumn, isLookupColumn } from './tables.js';
 
 export interface CalculatorTestOptions {
   readonly relativeTolerance?: number;
@@ -65,7 +72,7 @@ export function runCalculatorTests(
     }
 
     for (const variable of definition.variables) {
-      if (!isSolvable(variable, definition)) {
+      if (!isSolvable(variable, definition, options.tables)) {
         continue;
       }
       const partial: CalcState = { ...expected, [variable.name]: null };
@@ -106,25 +113,59 @@ export function runCalculatorTests(
 function isSolvable(
   variable: VariableDefinition,
   definition: CalculatorDefinition,
+  tables: TableResolver | undefined,
 ): boolean {
   if (variable.takeFrom !== undefined) {
     return true;
   }
   if (isTableSelectVariable(variable)) {
     // A table select only has a row to find when a plain table field reads it.
-    // Lookup fields are excluded from row matching, so they cannot supply the
-    // row on their own.
+    // A lookup field that varies with another variable cannot supply the row
+    // on its own, but one that reads at its standard point can.
     return definition.variables.some(
       (other) =>
         isNumberVariable(other) &&
         other.tableSelect === variable.name &&
-        other.tableAxis === undefined,
+        !readsVaryingLookup(other, definition, tables),
     );
   }
   if (variable.computable !== undefined) {
     return true;
   }
   return isNumberVariable(variable) && variable.tableSelect !== undefined;
+}
+
+/**
+ * True when a table field reads a lookup column that varies with another
+ * variable, which never matches rows. A lookup that reads only at its standard
+ * point is not varying and still identifies a row.
+ */
+function readsVaryingLookup(
+  variable: NumberVariableDefinition,
+  definition: CalculatorDefinition,
+  tables: TableResolver | undefined,
+): boolean {
+  const selectName = variable.tableSelect;
+  const fieldKey = variable.tableField;
+  if (selectName === undefined || fieldKey === undefined) {
+    return false;
+  }
+  if (tableAxisNames(variable).length === 0) {
+    return false;
+  }
+  const select = definition.variables.find(
+    (other): other is TableSelectVariableDefinition =>
+      isTableSelectVariable(other) && other.name === selectName,
+  );
+  if (select === undefined) {
+    return false;
+  }
+  const table = tables?.getTable(select.table);
+  if (table === undefined) {
+    return false;
+  }
+  const column = findColumn(table, fieldKey);
+  return column !== undefined && isLookupColumn(column);
 }
 
 /** Throws a detailed error when any calculator test check fails. */

@@ -10,7 +10,8 @@ import type {
 } from './types.js';
 import { isValidIdentifier } from './validate.js';
 import { parseCompositeUnit, tryDescribeUnit } from './units.js';
-import { parseLookupCell } from './interpolate.js';
+import type { UnitSymbol } from './units.js';
+import { lookupCellOf } from './interpolate.js';
 
 const COLUMN_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 
@@ -184,6 +185,30 @@ export function validateTableDefinition(table: TableDefinition): void {
         );
       }
     }
+    if (column.standards !== undefined) {
+      if (!isLookupColumn(column)) {
+        problems.push(
+          `${where}: standards are only allowed on a lookup column.`,
+        );
+      }
+      const composite =
+        column.unit === undefined ? null : parseCompositeUnit(column.unit);
+      for (const [axis, value] of Object.entries(column.standards)) {
+        if (
+          composite === null ||
+          !composite.axes.includes(axis as UnitSymbol)
+        ) {
+          problems.push(
+            `${where}: standard "${axis}" is not one of the column's axes.`,
+          );
+        }
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
+          problems.push(
+            `${where}: standard "${axis}" must be a finite number.`,
+          );
+        }
+      }
+    }
   }
 
   const keyColumn = columnsByKey.get(table.keyColumn);
@@ -268,12 +293,10 @@ export function tableRowProblems(
         );
       }
     } else if (isLookupColumn(column)) {
-      if (typeof value !== 'string') {
-        problems.push(`${where}: lookup column "${column.key}" must be text.`);
-      } else if (parseLookupCell(value) === null) {
+      if (lookupCellOf(value) === null) {
         problems.push(
-          `${where}: lookup column "${column.key}" must hold pairs such as ` +
-            '"100@25; 39@844".',
+          `${where}: lookup column "${column.key}" must hold samples such as ` +
+            '"100@25; 39@844" or a plain number.',
         );
       }
     } else if (isTextColumn(column)) {

@@ -83,10 +83,12 @@ export interface NumberVariableDefinition extends VariableBase {
   /** Column in that table. Requires `tableSelect`. */
   readonly tableField?: string;
   /**
-   * Name of the numeric variable that supplies the axis value for a lookup
-   * column. The column's unit must be a composite unit such as `kg/m3@°C`.
+   * Name of the numeric variable (or variables) that supply the axis value for
+   * a lookup column. The column's unit must be a composite unit such as
+   * `kg/m3@°C` or `kg/m3@°C,kPa`, listing one axis per name in the same order.
+   * An axis may be omitted; the column's standard for it is then used.
    */
-  readonly tableAxis?: string;
+  readonly tableAxis?: string | readonly string[];
   /**
    * Other numeric variables that hold the same quantity in a different form,
    * each mapped to a function that converts this variable's value into that
@@ -156,6 +158,17 @@ export function isTableFieldVariable(
   return variable.tableSelect !== undefined;
 }
 
+/** Normalizes a variable's `tableAxis` to an ordered list of axis names. */
+export function tableAxisNames(
+  variable: NumberVariableDefinition,
+): readonly string[] {
+  const axis = variable.tableAxis;
+  if (axis === undefined) {
+    return [];
+  }
+  return typeof axis === 'string' ? [axis] : axis;
+}
+
 /** Narrows a variable to a free text value. */
 export function isTextVariable(
   variable: VariableDefinition,
@@ -206,6 +219,12 @@ export interface TableColumn {
    * text cells such as `100@25; 39@844`.
    */
   readonly kind?: TableColumnKind;
+  /**
+   * Default axis values for a lookup column, keyed by axis unit (such as
+   * `{ '°C': 20, kPa: 101.325 }`). They fill in an axis the lookup leaves
+   * unset, and a sample that omits a trailing coordinate.
+   */
+  readonly standards?: Readonly<Record<string, number>>;
   readonly description?: string;
 }
 

@@ -130,6 +130,38 @@ describe('TableView', () => {
     expect(dialog.textContent).toContain('460 J/(kg·K)');
   });
 
+  it('offers a lookup button for a numeric lookup cell', async () => {
+    const table: TableDefinition = {
+      id: 'fluids',
+      title: 'Fluids',
+      keyColumn: 'id',
+      labelColumn: 'name',
+      columns: [
+        { key: 'id', label: 'ID', kind: 'text' },
+        { key: 'name', label: 'Name', kind: 'text' },
+        {
+          key: 'specificHeat',
+          label: 'Specific heat',
+          unit: 'J/(kg·K)@°C',
+          kind: 'lookup',
+        },
+      ],
+      rows: [{ id: 'water', name: 'Water', specificHeat: 4182 }],
+    };
+    const view = await mount(table, null);
+    button(view, 'lookup-specificHeat-water').click();
+    await view.updateComplete;
+
+    const dialog = view.querySelector('calc-lookup-dialog');
+    if (!(dialog instanceof LookupDialog)) {
+      throw new Error('Missing lookup dialog.');
+    }
+    await vi.waitFor(() => {
+      expect(dialog.querySelector('dialog')?.open).toBe(true);
+    });
+    expect(dialog.textContent).toContain('4182 J/(kg·K)');
+  });
+
   it('hides the custom-row toolbar without a store', async () => {
     const view = await mount(sampleTable(), null);
     expect(view.querySelector('[data-testid="add-row"]')).toBeNull();

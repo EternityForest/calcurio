@@ -36,14 +36,18 @@ describe('convertUnit', () => {
 });
 
 describe('composite units', () => {
-  it('splits a value unit and an axis unit', () => {
+  it('splits a value unit and its axis units', () => {
     expect(parseCompositeUnit('J/(kg·K)@°C')).toEqual({
       unit: 'J/(kg·K)',
-      axis: '°C',
+      axes: ['°C'],
     });
     expect(parseCompositeUnit('kg/m3@°C')).toEqual({
       unit: 'kg/m3',
-      axis: '°C',
+      axes: ['°C'],
+    });
+    expect(parseCompositeUnit('kg/m3@°C,kPa')).toEqual({
+      unit: 'kg/m3',
+      axes: ['°C', 'kPa'],
     });
   });
 
@@ -52,10 +56,12 @@ describe('composite units', () => {
     expect(parseCompositeUnit('kg/m3@')).toBeNull();
     expect(parseCompositeUnit('@°C')).toBeNull();
     expect(parseCompositeUnit('kg/m3@not-a-unit')).toBeNull();
+    expect(parseCompositeUnit('kg/m3@°C,not-a-unit')).toBeNull();
   });
 
-  it('joins a value unit and an axis unit', () => {
+  it('joins a value unit and one or more axis units', () => {
     expect(compositeUnit('kg/m3', '°C')).toBe('kg/m3@°C');
+    expect(compositeUnit('kg/m3', '°C', 'kPa')).toBe('kg/m3@°C,kPa');
   });
 });
 

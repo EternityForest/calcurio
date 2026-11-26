@@ -178,10 +178,11 @@ calc-app {
   margin-bottom: 0.25rem;
 }
 
-.calc-table-lookup-cell {
-  align-items: center;
-  display: flex;
-  gap: 0.4rem;
+.truncate {
+  display: inline-block; /* Or 'block' — required for max-width on inline elements like <span> or <a> */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .calc-table-lookup-button,

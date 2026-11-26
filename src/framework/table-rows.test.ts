@@ -143,6 +143,13 @@ describe('TableRowStore', () => {
     ).toThrow(TableRowsStorageError);
   });
 
+  it('accepts a plain number in a lookup column', () => {
+    const store = new TableRowStore(new MemoryStorage());
+    const table = sampleTable();
+    store.save(table, customRow({ specificHeat: 4182 }));
+    expect(store.list('materials')[0]!['specificHeat']).toBe(4182);
+  });
+
   it('caps the number of custom rows per table', () => {
     const store = new TableRowStore(new MemoryStorage());
     const table = sampleTable();
@@ -225,12 +232,30 @@ describe('exportTableRowsMarkdown', () => {
     const row = markdown.split('\n')[2]!;
     expect(row).toBe('| brass | Brass |  |  |  |');
   });
+
+  it('writes a numeric lookup cell verbatim', () => {
+    const markdown = exportTableRowsMarkdown(sampleTable(), [
+      customRow({ specificHeat: 4182 }),
+    ]);
+    const row = markdown.split('\n')[2]!;
+    expect(row).toBe('| brass | Brass | 8500 | yes | 4182 |');
+  });
 });
 
 describe('parseTableRowsMarkdown', () => {
   it('round-trips exported rows', () => {
     const table = sampleTable();
     const rows = [customRow(), customRow({ id: 'copper', name: 'Copper' })];
+    const parsed = parseTableRowsMarkdown(
+      table,
+      exportTableRowsMarkdown(table, rows),
+    );
+    expect(parsed).toEqual(rows);
+  });
+
+  it('round-trips a numeric lookup cell as a number', () => {
+    const table = sampleTable();
+    const rows = [customRow({ specificHeat: 4182 })];
     const parsed = parseTableRowsMarkdown(
       table,
       exportTableRowsMarkdown(table, rows),

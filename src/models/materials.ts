@@ -1,17 +1,22 @@
 /**
  * Thermophysical properties of common solids and liquids (plus the working
- * gases the fluids calculators use). Density, viscosity, thermal conductivity,
- * and thermal expansion are reference values at 20 °C. Specific heat is stored
- * as sampled pairs such as "4182@20; 4200@100" and interpolated against
- * temperature, so a single row can cover a material across a phase change.
+ * gases the fluids calculators use). Viscosity, thermal conductivity, and
+ * thermal expansion are reference values at 20 °C. Density and specific heat
+ * are stored as sampled lookup cells and interpolated: density against
+ * temperature and pressure, specific heat against temperature, so a single row
+ * can cover a material across a phase change.
  *
  * Melting/freezing and boiling points sit alongside the latent heats so the
  * phase-change calculator can account for a transition when the requested
  * temperature range crosses one.
  */
 
-import { interpolateAt, parseLookupCell } from '../framework/interpolate.js';
-import type { LookupPoint } from '../framework/interpolate.js';
+import {
+  interpolateAt,
+  interpolateLookup,
+  lookupCellOf,
+} from '../framework/interpolate.js';
+import type { LookupCell } from '../framework/interpolate.js';
 import { findRow, numericCell, textCell } from '../framework/tables.js';
 import type { TableDefinition, TableRow } from '../framework/types.js';
 
@@ -40,10 +45,10 @@ export const materialsTable: TableDefinition = {
   title: 'Materials',
   description:
     'Thermophysical properties of common solids and liquids, plus the working ' +
-    'gases used by the fluids calculators. Density, viscosity, thermal ' +
-    'conductivity, and thermal expansion are reference values at 20 °C. ' +
-    'Specific heat is sampled against temperature and interpolated, so one row ' +
-    'can span a phase change.',
+    'gases used by the fluids calculators. Viscosity, thermal conductivity, ' +
+    'and thermal expansion are reference values at 20 °C. Density and specific ' +
+    'heat are sampled lookups, interpolated against temperature and pressure ' +
+    'or against temperature alone.',
   keyColumn: 'id',
   labelColumn: 'label',
   columns: [
@@ -53,14 +58,20 @@ export const materialsTable: TableDefinition = {
     {
       key: 'density',
       label: 'Density',
-      unit: 'kg/m3',
-      description: 'Density at 20 °C.',
+      unit: 'kg/m3@°C,kPa',
+      kind: 'lookup',
+      standards: { '°C': 20, kPa: 101.325 },
+      description:
+        'Density sampled against temperature and pressure, written as ' +
+        '"value@temperature,pressure" pairs. Plain numbers are the value at ' +
+        '20 °C and 101.325 kPa.',
     },
     {
       key: 'specificHeat',
       label: 'Specific heat',
       unit: 'J/(kg·K)@°C',
       kind: 'lookup',
+      standards: { '°C': 20 },
       description:
         'Specific heat capacity sampled against temperature, written as ' +
         '"value@temperature" pairs.',
@@ -539,13 +550,13 @@ export const materialsTable: TableDefinition = {
   ],
 };
 
-/** A material row with its lookup column parsed. */
+/** A material row with its lookup columns parsed. */
 export interface Material {
   readonly id: string;
   readonly label: string;
   readonly state: string;
   readonly density: number | null;
-  readonly specificHeat: readonly LookupPoint[] | null;
+  readonly specificHeat: LookupCell | null;
   readonly thermalConductivity: number | null;
   readonly thermalExpansion: number | null;
   readonly viscosity: number | null;
@@ -556,16 +567,15 @@ export interface Material {
   readonly heatOfVaporization: number | null;
 }
 
-/** Reads a material row, parsing its specific-heat lookup. */
+/** Reads a material row, parsing its lookup columns. */
 export function materialFromRow(row: TableRow): Material {
-  const specificHeatCell = textCell(row['specificHeat']);
+  const densityCell = lookupCellOf(row['density']);
   return {
     id: textCell(row['id']) ?? '',
     label: textCell(row['label']) ?? '',
     state: textCell(row['state']) ?? '',
-    density: numericCell(row['density']),
-    specificHeat:
-      specificHeatCell === null ? null : parseLookupCell(specificHeatCell),
+    density: densityCell?.fallback ?? null,
+    specificHeat: lookupCellOf(row['specificHeat']),
     thermalConductivity: numericCell(row['thermalConductivity']),
     thermalExpansion: numericCell(row['thermalExpansion']),
     viscosity: numericCell(row['viscosity']),
@@ -583,15 +593,16 @@ export function findMaterial(id: string): Material | undefined {
   return row === undefined ? undefined : materialFromRow(row);
 }
 
-/** Specific heat at a temperature, or null when the row has no samples. */
+/** Specific heat at a temperature, or null when the row has no value. */
 export function specificHeatAt(
   material: Material,
   temperature: number,
 ): number | null {
-  if (material.specificHeat === null) {
+  const cell = material.specificHeat;
+  if (cell === null) {
     return null;
   }
-  return interpolateAt(material.specificHeat, temperature);
+  return interpolateLookup(cell, [temperature], [null]);
 }
 
 /**
@@ -605,17 +616,23 @@ export function sensibleHeatBetween(
   from: number,
   to: number,
 ): number | null {
-  const points = material.specificHeat;
-  if (points === null || points.length === 0) {
+  const cell = material.specificHeat;
+  if (cell === null) {
     return null;
   }
   const direction = to >= from ? 1 : -1;
   const low = Math.min(from, to);
   const high = Math.max(from, to);
+  if (cell.points.length === 0) {
+    return cell.fallback === null
+      ? null
+      : direction * cell.fallback * (high - low);
+  }
   const xs = new Set<number>([low, high]);
-  for (const point of points) {
-    if (point.x > low && point.x < high) {
-      xs.add(point.x);
+  for (const point of cell.points) {
+    const x = point.coords[0];
+    if (typeof x === 'number' && x > low && x < high) {
+      xs.add(x);
     }
   }
   const sorted = [...xs].sort((left, right) => left - right);
@@ -623,8 +640,8 @@ export function sensibleHeatBetween(
   for (let index = 0; index < sorted.length - 1; index += 1) {
     const x0 = sorted[index]!;
     const x1 = sorted[index + 1]!;
-    const y0 = interpolateAt(points, x0);
-    const y1 = interpolateAt(points, x1);
+    const y0 = interpolateAt(cell.points, x0);
+    const y1 = interpolateAt(cell.points, x1);
     if (y0 === null || y1 === null) {
       return null;
     }

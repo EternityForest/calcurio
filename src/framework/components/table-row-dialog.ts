@@ -2,7 +2,7 @@ import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
 import { errorMessage } from '../errors.js';
 import { formatNumber, parseNumberText } from '../format.js';
-import { parseLookupCell } from '../interpolate.js';
+import { lookupCellOf } from '../interpolate.js';
 import type { ValueUpdateResult } from '../runtime.js';
 import {
   isBooleanColumn,
@@ -258,7 +258,10 @@ function cellToText(column: TableColumn, cell: TableCell | undefined): string {
   if (isBooleanColumn(column) && typeof cell === 'boolean') {
     return cell ? 'yes' : 'no';
   }
-  if (isNumericColumn(column) && typeof cell === 'number') {
+  if (
+    (isNumericColumn(column) || isLookupColumn(column)) &&
+    typeof cell === 'number'
+  ) {
     return formatNumber(cell);
   }
   return String(cell);
@@ -286,10 +289,14 @@ function coerceCell(column: TableColumn, text: string): TableCell {
     return parseNumberText(trimmed);
   }
   if (isLookupColumn(column)) {
-    if (parseLookupCell(trimmed) === null) {
+    const cell = lookupCellOf(trimmed);
+    if (cell === null) {
       throw new Error(`"${trimmed}" is not a lookup value.`);
     }
-    return trimmed;
+    // A plain number is stored as a number so it reads as the fallback value.
+    return cell.points.length === 0 && cell.fallback !== null
+      ? cell.fallback
+      : trimmed;
   }
   return trimmed;
 }

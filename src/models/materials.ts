@@ -26,8 +26,8 @@ interface MaterialRowInput {
   readonly state: string;
   readonly density: number;
   readonly specificHeat: string;
-  readonly thermalConductivity: number;
-  readonly thermalExpansion: number;
+  readonly thermalConductivity: number|null;
+  readonly thermalExpansion: number|null;
   readonly viscosity: number | null;
   readonly meltingPoint: number | null;
   readonly freezingPoint: number | null;
@@ -540,6 +540,21 @@ export const materialsTable: TableDefinition = {
       specificHeat: '2000@20',
       thermalConductivity: 0.16,
       thermalExpansion: 2.0e-4,
+      viscosity: null,
+      meltingPoint: null,
+      freezingPoint: null,
+      boilingPoint: null,
+      heatOfFusion: null,
+      heatOfVaporization: null,
+    }),
+    row({
+      id: 'wheat-flour',
+      label: 'Flour',
+      state: 'solid',
+      density: 590,
+      specificHeat: '1700@20',
+      thermalConductivity: null,
+      thermalExpansion: null,
       viscosity: null,
       meltingPoint: null,
       freezingPoint: null,

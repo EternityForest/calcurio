@@ -50,6 +50,11 @@ export const CATEGORY_MANIFEST = {
     description: 'Everyday unit conversions between equivalent measures.',
     load: () => import('./categories/conversions/index.js'),
   },
+  digital: {
+    title: 'Digital',
+    description: 'Binary, hex, and IEEE floating point conversions.',
+    load: () => import('./categories/digital/index.js'),
+  },
   random: {
     title: 'Random',
     description: 'UUIDs, random numbers, and random choices.',

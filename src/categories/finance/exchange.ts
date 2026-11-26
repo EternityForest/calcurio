@@ -108,7 +108,7 @@ function storeRate(
   cache[pairKey(from, to)] = { rate, fetchedAt: Date.now() };
 }
 
-function isGold(currency: string): boolean {
+function isAsset(currency: string): boolean {
   return GOLD_CURRENCIES[currency] !== undefined;
 }
 
@@ -142,7 +142,7 @@ async function fetchGoldPrice(currency: string): Promise<number> {
   if (id === undefined) {
     throw new Error(`Unknown gold currency ${currency}.`);
   }
-  const response = await fetch(`${GOLD_API}/${encodeURIComponent(id)}`);
+  const response = await fetch(`${GOLD_API}/${encodeURIComponent(currency)}`);
   if (!response.ok) {
     throw new Error(`Gold price request failed (${response.status}).`);
   }
@@ -221,13 +221,13 @@ async function populateGoldPairs(
   }
 }
 
-async function resolveGoldRate(
+async function resolveAssetRate(
   cache: RateCache,
   from: string,
   to: string,
 ): Promise<number> {
-  const fromGold = isGold(from);
-  const toGold = isGold(to);
+  const fromGold = isAsset(from);
+  const toGold = isAsset(to);
   const fromUsd = fromGold ? await fetchGoldPrice(from) : null;
   const toUsd = toGold ? await fetchGoldPrice(to) : null;
 
@@ -289,8 +289,8 @@ async function convertWithCache(
   }
 
   const rate =
-    isGold(source) || isGold(target)
-      ? await resolveGoldRate(cache, source, target)
+    isAsset(source) || isAsset(target)
+      ? await resolveAssetRate(cache, source, target)
       : await resolveFiatRate(cache, source, target);
   return amount * rate;
 }

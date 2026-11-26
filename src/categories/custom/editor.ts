@@ -138,7 +138,7 @@ export class CustomEditorDialog extends LitElement {
               type="button"
               data-testid="save-custom"
               ?disabled=${problems.length > 0 || this.library === undefined}
-              @click=${this.handleSave}
+              @click=${() => void this.handleSave()}
             >
               Save
             </button>
@@ -301,7 +301,7 @@ export class CustomEditorDialog extends LitElement {
         class="button danger"
         type="button"
         data-testid="delete-custom"
-        @click=${this.handleDelete}
+        @click=${() => void this.handleDelete()}
       >
         ${this.confirmingDelete ? 'Confirm delete' : 'Delete'}
       </button>
@@ -338,17 +338,17 @@ export class CustomEditorDialog extends LitElement {
     this.stepDialog?.open(working, index);
   }
 
-  private readonly addSubcalc = (calculatorId: string): void => {
-    const entry = this.catalog?.get(calculatorId);
+  private readonly addSubcalc = (ref: string): void => {
+    const entry = this.catalog?.get(ref);
     const working = this.working;
     if (entry === undefined || working === null) {
       return;
     }
     const step: SubcalcStep = {
       kind: 'subcalc',
-      id: this.freeStepId(calculatorId),
+      id: this.freeStepId(entry.definition.id),
       label: entry.definition.title,
-      calculatorId,
+      calculatorRef: ref,
       config: defaultCustomConfig(entry.config),
       values: {},
       variables: {},
@@ -464,7 +464,7 @@ export class CustomEditorDialog extends LitElement {
     this.requestUpdate();
   };
 
-  private readonly handleSave = (): void => {
+  private readonly handleSave = async (): Promise<void> => {
     const library = this.library;
     const working = this.working;
     if (library === undefined || working === null) {
@@ -473,8 +473,8 @@ export class CustomEditorDialog extends LitElement {
     const candidate = withTrimmedTitle(working);
     try {
       const saved = this.isNew
-        ? library.create(candidate)
-        : library.save(candidate);
+        ? await library.create(candidate)
+        : await library.save(candidate);
       this.working = cloneCustom(saved);
       this.isNew = false;
       this.onSaved?.(saved);
@@ -485,7 +485,7 @@ export class CustomEditorDialog extends LitElement {
     }
   };
 
-  private readonly handleDelete = (): void => {
+  private readonly handleDelete = async (): Promise<void> => {
     const library = this.library;
     const working = this.working;
     if (library === undefined || working === null) {
@@ -497,7 +497,7 @@ export class CustomEditorDialog extends LitElement {
       return;
     }
     try {
-      library.remove(working.id);
+      await library.remove(working.id);
       this.onDeleted?.(working.id);
       this.close();
     } catch (error) {
@@ -562,7 +562,7 @@ function describeStep(
   switch (step.kind) {
     case 'subcalc':
       return (
-        catalog?.get(step.calculatorId)?.definition.title ?? step.calculatorId
+        catalog?.get(step.calculatorRef)?.definition.title ?? step.calculatorRef
       );
     case 'variable':
       return `Number (${step.unit})`;

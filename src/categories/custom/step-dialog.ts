@@ -140,11 +140,11 @@ export class CustomStepDialog extends LitElement {
   }
 
   private renderSubcalc(step: SubcalcStep): TemplateResult {
-    const entry = this.catalog?.get(step.calculatorId);
+    const entry = this.catalog?.get(step.calculatorRef);
     if (entry === undefined) {
       return html`
         <p class="alert danger">
-          The subcalculator "${step.calculatorId}" is not available.
+          The subcalculator "${step.calculatorRef}" is not available.
         </p>
       `;
     }
@@ -504,7 +504,7 @@ export class CustomStepDialog extends LitElement {
   private applyConfig(name: string, value: ConfigValue): void {
     const step = this.working;
     const entry = this.catalog?.get(
-      step?.kind === 'subcalc' ? step.calculatorId : '',
+      step?.kind === 'subcalc' ? step.calculatorRef : '',
     );
     if (step === null || step.kind !== 'subcalc' || entry === undefined) {
       return;
@@ -595,7 +595,7 @@ export class CustomStepDialog extends LitElement {
       return;
     }
     const definition = localDefinitions(
-      this.catalog?.requireEntry(step.calculatorId) as CatalogEntry,
+      this.catalog?.requireEntry(step.calculatorRef) as CatalogEntry,
       step,
     ).find((candidate) => candidate.name === name);
     if (definition === undefined) {
@@ -751,7 +751,7 @@ export function cloneStep(step: CustomStep): CustomStep {
       id: step.id,
       label: step.label,
       ...(step.hidden === undefined ? {} : { hidden: step.hidden }),
-      calculatorId: step.calculatorId,
+      calculatorRef: step.calculatorRef,
       config: { ...step.config },
       values: { ...step.values },
       variables: cloneWiringRecord(step.variables),

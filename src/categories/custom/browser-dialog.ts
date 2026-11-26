@@ -1,12 +1,21 @@
 import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
-import type { CatalogEntry, CalculatorCatalog } from '../../custom/catalog.js';
+import { errorMessage } from '../../framework/errors.js';
+import type {
+  CatalogCategory,
+  CatalogEntry,
+  CalculatorCatalog,
+} from '../../custom/catalog.js';
 
 let nextDialogId = 0;
 
+type BrowserStage = 'categories' | 'calculators';
+
 /**
- * Browses the calculators a custom may embed. Any calculator can be added
- * more than once, so no entry is ever excluded.
+ * Browses the calculators a custom may embed, in two steps: pick a category,
+ * then pick one of its calculators. Categories load lazily, so choosing one
+ * shows a brief loading state while its module is imported. Any calculator can
+ * be added more than once, so no entry is ever excluded.
  */
 export class CalculatorBrowserDialog extends LitElement {
   static override properties = {
@@ -15,8 +24,12 @@ export class CalculatorBrowserDialog extends LitElement {
   };
 
   declare catalog: CalculatorCatalog | undefined;
-  declare onChosen: ((calculatorId: string) => void) | undefined;
+  declare onChosen: ((ref: string) => void) | undefined;
 
+  private stage: BrowserStage = 'categories';
+  private categoryId: string | null = null;
+  private loading = false;
+  private loadError = '';
   private filter = '';
   private readonly titleId = `calc-calculator-browser-title-${nextDialogId++}`;
 
@@ -24,9 +37,9 @@ export class CalculatorBrowserDialog extends LitElement {
     return this;
   }
 
-  /** Opens the modal with an empty filter. */
+  /** Opens the modal at the category list, with an empty filter. */
   open(): void {
-    this.filter = '';
+    this.reset();
     this.requestUpdate();
     void this.updateComplete.then(() => this.showDialog());
   }
@@ -44,7 +57,6 @@ export class CalculatorBrowserDialog extends LitElement {
   }
 
   override render(): TemplateResult {
-    const entries = this.visibleEntries();
     return html`
       <dialog
         class="calc-dialog"
@@ -59,27 +71,109 @@ export class CalculatorBrowserDialog extends LitElement {
               Close
             </button>
           </header>
-          <label class="calc-custom-filter">
-            <span class="calc-field-label">Filter</span>
-            <input
-              class="form-control"
-              type="search"
-              autocomplete="off"
-              placeholder="Filter by name"
-              .value=${this.filter}
-              @input=${this.handleFilter}
-            />
-          </label>
-          <div class="calc-tiles calc-custom-browser">
-            ${entries.map((entry) => this.renderEntry(entry))}
-          </div>
           ${
-            entries.length === 0
-              ? html`<p class="help">No calculators match this filter.</p>`
-              : nothing
+            this.stage === 'categories'
+              ? this.renderCategories()
+              : this.renderCalculators()
           }
         </div>
       </dialog>
+    `;
+  }
+
+  private renderCategories(): TemplateResult {
+    const categories = this.visibleCategories();
+    return html`
+      <p class="help">Choose a category.</p>
+      ${this.renderFilter()}
+      <div class="calc-tiles calc-custom-browser">
+        ${categories.map((category) => this.renderCategory(category))}
+      </div>
+      ${
+        categories.length === 0
+          ? html`<p class="help">No categories match this filter.</p>`
+          : nothing
+      }
+    `;
+  }
+
+  private renderCalculators(): TemplateResult {
+    const category = this.catalog
+      ?.categories()
+      .find((candidate) => candidate.id === this.categoryId);
+    return html`
+      <div class="calc-actions">
+        <button
+          class="button"
+          type="button"
+          data-testid="browser-back"
+          @click=${this.backToCategories}
+        >
+          ← Categories
+        </button>
+        ${
+          category === undefined
+            ? nothing
+            : html`<strong>${category.title}</strong>`
+        }
+      </div>
+      ${this.renderFilter()} ${this.renderCalculatorBody()}
+    `;
+  }
+
+  private renderCalculatorBody(): TemplateResult {
+    if (this.loading) {
+      return html`<p class="help" data-testid="browser-loading">Loading…</p>`;
+    }
+    if (this.loadError !== '') {
+      return html`<p class="alert danger" role="alert">${this.loadError}</p>`;
+    }
+    const entries = this.visibleEntries();
+    return html`
+      <div class="calc-tiles calc-custom-browser">
+        ${entries.map((entry) => this.renderEntry(entry))}
+      </div>
+      ${
+        entries.length === 0
+          ? html`<p class="help">Nothing here can be added to a custom.</p>`
+          : nothing
+      }
+    `;
+  }
+
+  private renderFilter(): TemplateResult {
+    return html`
+      <label class="calc-custom-filter">
+        <span class="calc-field-label">Filter</span>
+        <input
+          class="form-control"
+          type="search"
+          autocomplete="off"
+          placeholder="Filter by name"
+          data-testid="browser-filter"
+          .value=${this.filter}
+          @input=${this.handleFilter}
+        />
+      </label>
+    `;
+  }
+
+  private renderCategory(category: CatalogCategory): TemplateResult {
+    const description = category.description;
+    return html`
+      <button
+        class="card calc-tile"
+        type="button"
+        data-testid=${`choose-category-${category.id}`}
+        @click=${() => this.chooseCategory(category.id)}
+      >
+        <strong>${category.title}</strong>
+        ${
+          description === ''
+            ? nothing
+            : html`<span class="help">${description}</span>`
+        }
+      </button>
     `;
   }
 
@@ -90,7 +184,7 @@ export class CalculatorBrowserDialog extends LitElement {
         class="card calc-tile"
         type="button"
         data-testid=${`choose-${entry.definition.id}`}
-        @click=${() => this.choose(entry.definition.id)}
+        @click=${() => this.choose(entry.ref)}
       >
         <strong>${entry.definition.title}</strong>
         ${
@@ -102,8 +196,23 @@ export class CalculatorBrowserDialog extends LitElement {
     `;
   }
 
+  private visibleCategories(): readonly CatalogCategory[] {
+    const categories = this.catalog?.categories() ?? [];
+    const needle = this.filter.trim().toLowerCase();
+    if (needle === '') {
+      return categories;
+    }
+    return categories.filter(
+      (category) =>
+        category.title.toLowerCase().includes(needle) ||
+        category.id.toLowerCase().includes(needle),
+    );
+  }
+
   private visibleEntries(): readonly CatalogEntry[] {
-    const entries = this.catalog?.list() ?? [];
+    const categoryId = this.categoryId;
+    const entries =
+      categoryId === null ? [] : (this.catalog?.entries(categoryId) ?? []);
     const needle = this.filter.trim().toLowerCase();
     if (needle === '') {
       return entries;
@@ -115,6 +224,42 @@ export class CalculatorBrowserDialog extends LitElement {
     );
   }
 
+  private chooseCategory(categoryId: string): void {
+    this.categoryId = categoryId;
+    this.stage = 'calculators';
+    this.filter = '';
+    this.loadError = '';
+    this.loading = !(this.catalog?.isLoaded(categoryId) ?? false);
+    this.requestUpdate();
+    void this.loadCategory(categoryId);
+  }
+
+  private async loadCategory(categoryId: string): Promise<void> {
+    const catalog = this.catalog;
+    if (catalog === undefined) {
+      this.loading = false;
+      this.requestUpdate();
+      return;
+    }
+    try {
+      await catalog.load(categoryId);
+    } catch (error) {
+      this.loadError = errorMessage(error);
+    } finally {
+      this.loading = false;
+      this.requestUpdate();
+    }
+  }
+
+  private readonly backToCategories = (): void => {
+    this.stage = 'categories';
+    this.categoryId = null;
+    this.loadError = '';
+    this.loading = false;
+    this.filter = '';
+    this.requestUpdate();
+  };
+
   private readonly handleFilter = (event: Event): void => {
     const target = event.target;
     if (target instanceof HTMLInputElement) {
@@ -123,15 +268,23 @@ export class CalculatorBrowserDialog extends LitElement {
     }
   };
 
-  private choose(calculatorId: string): void {
-    this.onChosen?.(calculatorId);
+  private choose(ref: string): void {
+    this.onChosen?.(ref);
     this.close();
   }
 
   private readonly handleClose = (): void => {
-    this.filter = '';
+    this.reset();
     this.requestUpdate();
   };
+
+  private reset(): void {
+    this.stage = 'categories';
+    this.categoryId = null;
+    this.loading = false;
+    this.loadError = '';
+    this.filter = '';
+  }
 
   private get dialogElement(): HTMLDialogElement | null {
     return this.querySelector<HTMLDialogElement>('dialog.calc-dialog');

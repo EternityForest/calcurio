@@ -194,7 +194,6 @@ export class CalculatorView extends LitElement {
       pinned: runtime.isPinned(name),
       issues: runtime.issuesFor(name).map((issue) => issue.message),
       highlight: source !== null,
-      ...(source === null ? {} : { sourceNote: `Taken from ${source}` }),
     };
 
     if (isTableSelectVariable(variable)) {

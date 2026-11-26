@@ -1,7 +1,8 @@
 import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
-import type { CategoryHandle } from '../../framework/app.js';
+import type { CalculatorApp, CategoryHandle } from '../../framework/app.js';
 import { browserLocalStorage } from '../../framework/bookmarks.js';
+import type { CategoryManifest } from '../../framework/types.js';
 import { CalculatorCatalog } from '../../custom/catalog.js';
 import { CustomStore } from '../../custom/store.js';
 import type { CustomDefinition } from '../../custom/types.js';
@@ -22,12 +23,14 @@ import './export-dialog.js';
  */
 export class CustomHub extends LitElement {
   static override properties = {
+    app: { attribute: false },
     handle: { attribute: false },
     store: { attribute: false },
     openCalculator: { attribute: false },
     onChanged: { attribute: false },
   };
 
+  declare app: CalculatorApp<CategoryManifest> | undefined;
   declare handle: CategoryHandle | undefined;
   /**
    * Storage override. When left unset the hub uses the browser's
@@ -39,6 +42,7 @@ export class CustomHub extends LitElement {
 
   private library: CustomLibrary | null = null;
   private catalog: CalculatorCatalog | null = null;
+  private prepared = false;
   private pendingDelete: string | null = null;
 
   override createRenderRoot(): HTMLElement {
@@ -53,7 +57,7 @@ export class CustomHub extends LitElement {
   override render(): TemplateResult {
     this.ensureLibrary();
     const library = this.library;
-    if (library === null) {
+    if (library === null || !this.prepared) {
       return html`<p class="help" data-testid="custom-preparing">
         Preparing the Custom category…
       </p>`;
@@ -192,16 +196,24 @@ export class CustomHub extends LitElement {
   }
 
   private ensureLibrary(): void {
-    if (this.library !== null || this.handle === undefined) {
+    const app = this.app;
+    if (
+      this.library !== null ||
+      this.handle === undefined ||
+      app === undefined
+    ) {
       return;
     }
-    this.catalog = CalculatorCatalog.standard();
+    this.catalog = new CalculatorCatalog(app);
     this.library = new CustomLibrary(
       this.handle,
       this.resolveStore(),
       this.catalog,
     );
-    this.library.refresh();
+    void this.library.refresh().then(() => {
+      this.prepared = true;
+      this.requestUpdate();
+    });
   }
 
   private resolveStore(): CustomStore | null {
@@ -238,11 +250,13 @@ export class CustomHub extends LitElement {
       return;
     }
     this.pendingDelete = null;
-    try {
-      library.remove(id);
-    } catch {
-      // The library records its own read/write errors for display.
-    }
+    void library.remove(id).then(
+      () => this.finishChange(),
+      () => this.finishChange(),
+    );
+  }
+
+  private finishChange(): void {
     this.onChanged?.();
     this.requestUpdate();
   }

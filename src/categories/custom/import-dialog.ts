@@ -81,7 +81,7 @@ export class CustomImportDialog extends LitElement {
             data-testid="import-json"
             rows="10"
             spellcheck="false"
-            placeholder='{ "version": 1, "id": "...", "title": "...", ... }'
+            placeholder='{ "version": 2, "id": "...", "title": "...", ... }'
             .value=${this.text}
             @input=${this.handleText}
           ></textarea>
@@ -96,7 +96,7 @@ export class CustomImportDialog extends LitElement {
               type="button"
               data-testid="import-submit"
               ?disabled=${this.text.trim() === ''}
-              @click=${this.handleImport}
+              @click=${() => void this.handleImport()}
             >
               Import
             </button>
@@ -137,13 +137,13 @@ export class CustomImportDialog extends LitElement {
     );
   };
 
-  private readonly handleImport = (): void => {
+  private readonly handleImport = async (): Promise<void> => {
     const library = this.library;
     if (library === undefined) {
       return;
     }
     try {
-      const imported = library.importJson(this.text.trim());
+      const imported = await library.importJson(this.text.trim());
       this.onImported?.(imported);
       this.close();
     } catch (error) {

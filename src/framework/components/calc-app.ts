@@ -192,7 +192,7 @@ export class CalcApp extends LitElement {
     const hubTag = app.manifest[categoryId]?.hub;
     if (hubTag !== undefined) {
       return html`<p class="help">${handle.description}</p>
-        ${this.renderHub(handle, hubTag)}`;
+        ${this.renderHub(app, handle, hubTag)}`;
     }
 
     if (handle.calculators.length === 0 && handle.tables.length === 0) {
@@ -210,10 +210,15 @@ export class CalcApp extends LitElement {
    * defined by the category module, which has loaded by the time we get here.
    * A hub owns its own list and asks the app to re-render through `onChanged`.
    */
-  private renderHub(handle: CategoryHandle, tag: string): TemplateResult {
+  private renderHub(
+    app: CalculatorApp<CategoryManifest>,
+    handle: CategoryHandle,
+    tag: string,
+  ): TemplateResult {
     const element = unsafeStatic(tag);
     return staticHtml`
       <${element}
+        .app=${app}
         .handle=${handle}
         .openCalculator=${(calculatorId: string) =>
           this.openCalculator(handle.id, calculatorId)}

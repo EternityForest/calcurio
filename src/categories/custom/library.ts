@@ -1,11 +1,12 @@
 import type { CategoryHandle } from '../../framework/app.js';
 import { CustomStorageError, errorMessage } from '../../framework/errors.js';
 import type { CalculatorDefinition } from '../../framework/types.js';
-import { CalculatorCatalog } from '../../custom/catalog.js';
+import type { CalculatorCatalog } from '../../custom/catalog.js';
 import { compileCustom } from '../../custom/compile.js';
 import { customToJson } from '../../custom/serialize.js';
 import type { CustomStore } from '../../custom/store.js';
 import type { CustomDefinition } from '../../custom/types.js';
+import { parseCatalogRef } from '../../custom/types.js';
 
 /** One row of the Custom category: a saved custom and how it stands. */
 export interface LibraryEntry {
@@ -66,38 +67,39 @@ export class CustomLibrary {
   }
 
   /** Adds a new custom under a fresh id, then re-registers the category. */
-  create(custom: CustomDefinition): CustomDefinition {
+  async create(custom: CustomDefinition): Promise<CustomDefinition> {
     const saved = this.requireStore().importCustom(custom);
-    this.refresh();
+    await this.refresh();
     return saved;
   }
 
   /** Inserts or replaces a custom by id, then re-registers the category. */
-  save(custom: CustomDefinition): CustomDefinition {
+  async save(custom: CustomDefinition): Promise<CustomDefinition> {
     const saved = this.requireStore().save(custom);
-    this.refresh();
+    await this.refresh();
     return saved;
   }
 
   /** Deletes a custom by id, then re-registers the category. */
-  remove(id: string): void {
+  async remove(id: string): Promise<void> {
     this.requireStore().delete(id);
-    this.refresh();
+    await this.refresh();
   }
 
   /** Imports exported JSON text, then re-registers the category. */
-  importJson(text: string): CustomDefinition {
+  async importJson(text: string): Promise<CustomDefinition> {
     const saved = this.requireStore().importJson(text);
-    this.refresh();
+    await this.refresh();
     return saved;
   }
 
   /**
-   * Re-registers every saved custom, compiling only those whose stored text
+   * Re-registers every saved custom, loading the categories they embed so
+   * their subcalculators resolve, then compiling only those whose stored text
    * changed. A custom that fails to compile stays listed but is not runnable,
    * and its problem is shown in the hub.
    */
-  refresh(): void {
+  async refresh(): Promise<void> {
     this.problems = new Map();
     if (this.store === null) {
       this.readError = null;
@@ -112,6 +114,8 @@ export class CustomLibrary {
       this.readError = errorMessage(error);
       return;
     }
+
+    await this.loadReferencedCategories(customs);
 
     const alive = new Set<string>();
     for (const custom of customs) {
@@ -129,6 +133,36 @@ export class CustomLibrary {
         this.compiled.delete(id);
         this.handle.remove(id);
       }
+    }
+  }
+
+  /** Loads the categories the stored customs embed, so they can compile. */
+  private async loadReferencedCategories(
+    customs: readonly CustomDefinition[],
+  ): Promise<void> {
+    const categoryIds = new Set<string>();
+    for (const custom of customs) {
+      for (const step of custom.steps) {
+        if (step.kind !== 'subcalc') {
+          continue;
+        }
+        const ref = parseCatalogRef(step.calculatorRef);
+        if (ref !== null) {
+          categoryIds.add(ref.categoryId);
+        }
+      }
+    }
+    await Promise.all(
+      [...categoryIds].map((categoryId) => this.loadCategory(categoryId)),
+    );
+  }
+
+  private async loadCategory(categoryId: string): Promise<void> {
+    try {
+      await this.catalog.load(categoryId);
+    } catch {
+      // A category that fails to load leaves the customs that embed it with a
+      // "unknown subcalculator" problem; the rest still compile and run.
     }
   }
 

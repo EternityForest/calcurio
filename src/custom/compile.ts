@@ -1,6 +1,5 @@
 import type {
   CalcState,
-  CalculatorConfig,
   CalculatorDefinition,
   NumberVariableDefinition,
   TableSelectVariableDefinition,
@@ -10,11 +9,7 @@ import type {
 } from '../framework/types.js';
 import { isTableSelectVariable, isTextVariable } from '../framework/types.js';
 import type { CalculatorCatalog } from './catalog.js';
-import {
-  customConfigFields,
-  defaultCustomConfig,
-  subcalcConfig,
-} from './steps.js';
+import { localVariables } from './steps.js';
 import { globalVariableName, parseWirePath, STEP_VALUE_NAME } from './types.js';
 import type {
   CustomDefinition,
@@ -32,26 +27,23 @@ import { validateCustom } from './validate.js';
  * between them, and each subcalculator keeps its own settings and values. The
  * runtime then solves the whole thing with its usual refinement rounds, so a
  * wire that reaches an earlier step simply starts another round.
+ *
+ * A step's settings are fixed when the custom is built, so the compiled
+ * definition exposes no config fields: the subcalculator's options belong to
+ * the editor, not the running calculator.
  */
 export function compileCustom(
   custom: CustomDefinition,
   catalog: CalculatorCatalog,
 ): CalculatorDefinition {
   validateCustom(custom, catalog);
-  const config = customConfigFields(custom, catalog);
-  const buildVariables = (
-    cfg: CalculatorConfig,
-  ): readonly VariableDefinition[] =>
-    buildCustomVariables(custom, catalog, cfg);
   return {
     id: custom.id,
     title: custom.title,
     ...(custom.description === undefined
       ? {}
       : { description: custom.description }),
-    config,
-    variables: buildVariables(defaultCustomConfig(config)),
-    buildVariables,
+    variables: buildCustomVariables(custom, catalog),
   };
 }
 
@@ -62,16 +54,15 @@ interface PendingVariable {
   readonly base: VariableDefinition;
 }
 
-/** Builds the whole variable list for one config, dropping dangling wires. */
+/** Builds the whole variable list, dropping dangling wires. */
 function buildCustomVariables(
   custom: CustomDefinition,
   catalog: CalculatorCatalog,
-  config: CalculatorConfig,
 ): readonly VariableDefinition[] {
   const pending: PendingVariable[] = [];
   for (const step of custom.steps) {
     if (step.kind === 'subcalc') {
-      pending.push(...pendingSubcalcVariables(step, catalog, config));
+      pending.push(...pendingSubcalcVariables(step, catalog));
     } else {
       pending.push(pendingStandaloneVariable(step));
     }
@@ -84,10 +75,8 @@ function buildCustomVariables(
 function pendingSubcalcVariables(
   step: SubcalcStep,
   catalog: CalculatorCatalog,
-  config: CalculatorConfig,
 ): PendingVariable[] {
-  const entry = catalog.requireEntry(step.calculatorId);
-  const local = entry.variables(subcalcConfig(step, entry, config));
+  const local = localVariables(step, catalog);
   const localNames = local.map((definition) => definition.name);
   return local.map((definition) => ({
     step,

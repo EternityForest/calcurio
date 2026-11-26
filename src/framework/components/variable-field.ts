@@ -23,8 +23,6 @@ interface FieldBase {
   readonly issues: readonly string[];
   /** Whether the field is emphasised (its value arrives over a wire). */
   readonly highlight?: boolean;
-  /** Short note describing where a highlighted value comes from. */
-  readonly sourceNote?: string;
 }
 
 /** A numeric value with a unit selector. */
@@ -144,11 +142,6 @@ export class VariableField extends LitElement {
             : model.kind === 'text'
               ? this.renderTextInput(model)
               : this.renderNumberInput(model)
-        }
-        ${
-          model.sourceNote === undefined || model.sourceNote === ''
-            ? nothing
-            : html`<p class="help calc-field-source">${model.sourceNote}</p>`
         }
         ${
           model.description === ''

@@ -1,4 +1,4 @@
-import type { CalculatorCatalog, CatalogEntry } from './catalog.js';
+import type { CalculatorCatalog } from './catalog.js';
 import type {
   CalcState,
   ConfigFieldDefinition,
@@ -6,7 +6,7 @@ import type {
   CalculatorConfig,
   VariableDefinition,
 } from '../framework/types.js';
-import { globalVariableName, STEP_VALUE_NAME, wirePath } from './types.js';
+import { STEP_VALUE_NAME, wirePath } from './types.js';
 import type {
   CustomDefinition,
   CustomStep,
@@ -73,8 +73,8 @@ export function defaultCustomConfig(
 
 /**
  * The variable list a step contributes, in local names, using the step's own
- * stored config. Only the editor needs this; compile builds the list from the
- * live parent config instead. A step whose subcalculator is missing yields no
+ * stored config. The editor and the compiler both build from this, so they
+ * agree on names and kinds. A step whose subcalculator is missing yields no
  * fields, so callers that collect validation problems never throw here.
  */
 export function localVariables(
@@ -82,7 +82,7 @@ export function localVariables(
   catalog: CalculatorCatalog,
 ): readonly VariableDefinition[] {
   if (step.kind === 'subcalc') {
-    const entry = catalog.get(step.calculatorId);
+    const entry = catalog.get(step.calculatorRef);
     if (entry === undefined) {
       return [];
     }
@@ -107,59 +107,8 @@ export function stepFields(
 }
 
 /**
- * The settings every subcalculator step exposes, namespaced so a custom with
- * several steps has no colliding field names. Their defaults come from the
- * step's stored config.
+ * Every wire path defined by a custom, with the labels a dropdown shows.
  */
-export function customConfigFields(
-  custom: CustomDefinition,
-  catalog: CalculatorCatalog,
-): readonly ConfigFieldDefinition[] {
-  const fields: ConfigFieldDefinition[] = [];
-  for (const step of custom.steps) {
-    if (step.kind !== 'subcalc') {
-      continue;
-    }
-    const entry = catalog.requireEntry(step.calculatorId);
-    for (const field of entry.config) {
-      fields.push({
-        name: globalVariableName(step.id, field.name),
-        label: `${step.label}: ${field.label}`,
-        kind: field.kind,
-        default: step.config[field.name] ?? field.default,
-        ...(field.description === undefined
-          ? {}
-          : { description: field.description }),
-        ...(field.options === undefined ? {} : { options: field.options }),
-        ...(field.min === undefined ? {} : { min: field.min }),
-        ...(field.max === undefined ? {} : { max: field.max }),
-      });
-    }
-  }
-  return fields;
-}
-
-/**
- * Reads one subcalculator step's own config out of a resolved parent config.
- * The parent stores it under namespaced names.
- */
-export function subcalcConfig(
-  step: CustomStep,
-  entry: CatalogEntry,
-  config: CalculatorConfig,
-): CalculatorConfig {
-  const provided: Record<string, ConfigValue> = {};
-  for (const field of entry.config) {
-    const name = globalVariableName(step.id, field.name);
-    const value = config[name];
-    if (value !== undefined) {
-      provided[field.name] = value;
-    }
-  }
-  return resolveFieldConfig(entry.config, provided);
-}
-
-/** Every wire path defined by a custom, with the labels a dropdown shows. */
 export function wireOptions(
   custom: CustomDefinition,
   catalog: CalculatorCatalog,
@@ -209,7 +158,7 @@ function pruneStep(
   if (step.kind !== 'subcalc') {
     return { ...step, variable: pruneWiring(step.variable, paths) ?? {} };
   }
-  if (catalog.get(step.calculatorId) === undefined) {
+  if (catalog.get(step.calculatorRef) === undefined) {
     return step;
   }
   const known = new Set(

@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { CATEGORY_MANIFEST } from '../app.js';
+import { CalculatorApp } from '../framework/app.js';
 import type { KeyValueStorage } from '../framework/bookmarks.js';
 import {
   CustomDefinitionError,
@@ -29,7 +31,13 @@ class MemoryStorage implements KeyValueStorage {
   }
 }
 
-const catalog = CalculatorCatalog.standard();
+const app = new CalculatorApp(CATEGORY_MANIFEST);
+const catalog = new CalculatorCatalog(app);
+
+beforeAll(async () => {
+  await catalog.load('math');
+  await catalog.load('electrical');
+});
 
 /** The step at `index`, raising when it is missing. */
 function stepAt(custom: CustomDefinition, index: number): CustomStep {
@@ -52,7 +60,7 @@ function subcalcAt(custom: CustomDefinition, index: number): SubcalcStep {
 /** Multiply (2, 3) then add its product to 4. */
 function multiplyThenAdd(): CustomDefinition {
   return {
-    version: 1,
+    version: 2,
     id: 'double-add',
     title: 'Double then add',
     steps: [
@@ -60,7 +68,7 @@ function multiplyThenAdd(): CustomDefinition {
         kind: 'subcalc',
         id: 'a',
         label: 'Product',
-        calculatorId: 'multiply',
+        calculatorRef: 'math:multiply',
         config: { slots: 2 },
         values: { value1: 2, value2: 3 },
         variables: {},
@@ -69,7 +77,7 @@ function multiplyThenAdd(): CustomDefinition {
         kind: 'subcalc',
         id: 'b',
         label: 'Sum',
-        calculatorId: 'add',
+        calculatorRef: 'math:add',
         config: { slots: 2 },
         values: { value2: 4 },
         variables: { value1: { takeFrom: 'a.product' } },
@@ -115,7 +123,7 @@ describe('custom serialization', () => {
   });
 
   it('rejects an unsupported version', () => {
-    expect(() => parseCustom({ ...multiplyThenAdd(), version: 2 })).toThrow(
+    expect(() => parseCustom({ ...multiplyThenAdd(), version: 3 })).toThrow(
       /version/,
     );
   });
@@ -190,7 +198,7 @@ describe('custom validation', () => {
 
   it('requires at least one subcalculator step', () => {
     const custom: CustomDefinition = {
-      version: 1,
+      version: 2,
       id: 'only-text',
       title: 'Only text',
       steps: [{ kind: 'text', id: 'note', label: 'Note', variable: {} }],
@@ -205,7 +213,7 @@ describe('custom validation', () => {
     const first = subcalcAt(custom, 0);
     const broken: CustomDefinition = {
       ...custom,
-      steps: [{ ...first, calculatorId: 'nope' }, stepAt(custom, 1)],
+      steps: [{ ...first, calculatorRef: 'math:nope' }, stepAt(custom, 1)],
     };
     expect(customProblems(broken, catalog).join('\n')).toMatch(
       /unknown subcalculator/,
@@ -214,7 +222,7 @@ describe('custom validation', () => {
 
   it('reports a wire that measures a different kind', () => {
     const custom: CustomDefinition = {
-      version: 1,
+      version: 2,
       id: 'mismatch',
       title: 'Mismatch',
       steps: [
@@ -222,7 +230,7 @@ describe('custom validation', () => {
           kind: 'subcalc',
           id: 's',
           label: 'Add',
-          calculatorId: 'add',
+          calculatorRef: 'math:add',
           config: { slots: 2 },
           values: {},
           variables: {},
@@ -247,14 +255,14 @@ describe('custom validation', () => {
       kind: 'subcalc' as const,
       id,
       label: id,
-      calculatorId: 'wire-resistance',
+      calculatorRef: 'electrical:wire-resistance',
       config: {},
       values: {},
       variables:
         gaugeFrom === undefined ? {} : { gauge: { takeFrom: gaugeFrom } },
     });
     const custom: CustomDefinition = {
-      version: 1,
+      version: 2,
       id: 'tables',
       title: 'Tables',
       steps: [step('s1'), step('s2', 's1.metal')],
@@ -269,14 +277,14 @@ describe('custom validation', () => {
       kind: 'subcalc' as const,
       id,
       label: id,
-      calculatorId: 'wire-resistance',
+      calculatorRef: 'electrical:wire-resistance',
       config: {},
       values: {},
       variables:
         metalFrom === undefined ? {} : { metal: { takeFrom: metalFrom } },
     });
     const custom: CustomDefinition = {
-      version: 1,
+      version: 2,
       id: 'tables-ok',
       title: 'Tables OK',
       steps: [step('s1'), step('s2', 's1.metal')],
@@ -304,10 +312,8 @@ describe('compileCustom', () => {
       'b_value2',
       'b_sum',
     ]);
-    expect(definition.config?.map((field) => field.name)).toEqual([
-      'a_slots',
-      'b_slots',
-    ]);
+    expect(definition.config).toBeUndefined();
+    expect(definition.buildVariables).toBeUndefined();
     const bValue1 = definition.variables.find(
       (variable) => variable.name === 'b_value1',
     );
@@ -336,9 +342,9 @@ describe('compileCustom', () => {
     }
   });
 
-  it('drops a wire whose source disappears with the config', () => {
-    const custom: CustomDefinition = {
-      version: 1,
+  it('bakes a step’s config so its wires are fixed at build time', () => {
+    const withSlots = (slots: number): CustomDefinition => ({
+      version: 2,
       id: 'shrink',
       title: 'Shrink',
       steps: [
@@ -346,8 +352,8 @@ describe('compileCustom', () => {
           kind: 'subcalc',
           id: 'a',
           label: 'Add',
-          calculatorId: 'add',
-          config: { slots: 3 },
+          calculatorRef: 'math:add',
+          config: { slots },
           values: {},
           variables: {},
         },
@@ -359,14 +365,13 @@ describe('compileCustom', () => {
           variable: { takeFrom: 'a.value3' },
         },
       ],
-    };
-    const definition = compileCustom(custom, catalog);
-    const out = (config: Record<string, number>) =>
-      definition
-        .buildVariables?.(config)
-        .find((variable) => variable.name === 'out_value');
-    expect(out({ a_slots: 3 })?.takeFrom).toBe('a_value3');
-    expect(out({ a_slots: 2 })?.takeFrom).toBeUndefined();
+    });
+    const out = (slots: number) =>
+      compileCustom(withSlots(slots), catalog).variables.find(
+        (variable) => variable.name === 'out_value',
+      );
+    expect(out(3)?.takeFrom).toBe('a_value3');
+    expect(() => out(2)).toThrow(CustomDefinitionError);
   });
 });
 
@@ -452,7 +457,7 @@ describe('CustomStore', () => {
 
   it('raises on an unsupported stored version', () => {
     const storage = new MemoryStorage();
-    storage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify({ version: 2 }));
+    storage.setItem(CUSTOM_STORAGE_KEY, JSON.stringify({ version: 3 }));
     const store = new CustomStore(storage);
     expect(() => store.list()).toThrow(/unsupported version/);
   });
@@ -461,7 +466,7 @@ describe('CustomStore', () => {
     const storage = new MemoryStorage();
     storage.setItem(
       CUSTOM_STORAGE_KEY,
-      JSON.stringify({ version: 1, customs: [{ version: 1, id: 'x' }] }),
+      JSON.stringify({ version: 2, customs: [{ version: 2, id: 'x' }] }),
     );
     const store = new CustomStore(storage);
     expect(() => store.list()).toThrow(/invalid/);

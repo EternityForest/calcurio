@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 
-import { afterEach, describe, expect, it } from 'vitest';
-import { CategoryHandle } from '../../framework/app.js';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { CATEGORY_MANIFEST } from '../../app.js';
+import { CalculatorApp, CategoryHandle } from '../../framework/app.js';
 import type { KeyValueStorage } from '../../framework/bookmarks.js';
 import { CustomStorageError } from '../../framework/errors.js';
 import { CalculatorRuntime } from '../../framework/runtime.js';
@@ -44,7 +45,12 @@ class UnreadableStorage implements KeyValueStorage {
   removeItem(): void {}
 }
 
-const catalog = CalculatorCatalog.standard();
+const app = new CalculatorApp(CATEGORY_MANIFEST);
+const catalog = new CalculatorCatalog(app);
+
+beforeAll(async () => {
+  await catalog.load('math');
+});
 
 function makeHandle(): CategoryHandle {
   return new CategoryHandle('custom', 'Custom', 'Build your own.', () =>
@@ -55,7 +61,7 @@ function makeHandle(): CategoryHandle {
 /** Multiply (2, 3) then add its product to 4, as the editor would build it. */
 function sampleCustom(): CustomDefinition {
   return {
-    version: 1,
+    version: 2,
     id: 'double-add',
     title: 'Double add',
     steps: [
@@ -63,7 +69,7 @@ function sampleCustom(): CustomDefinition {
         kind: 'subcalc',
         id: 'multiply',
         label: 'Multiply',
-        calculatorId: 'multiply',
+        calculatorRef: 'math:multiply',
         config: { slots: 2 },
         values: { value1: 2, value2: 3 },
         variables: {},
@@ -72,7 +78,7 @@ function sampleCustom(): CustomDefinition {
         kind: 'subcalc',
         id: 'add',
         label: 'Add',
-        calculatorId: 'add',
+        calculatorRef: 'math:add',
         config: { slots: 2 },
         values: { value2: 4 },
         variables: { value1: { takeFrom: 'multiply.product' } },
@@ -128,6 +134,7 @@ async function mountHub(
   }
   const hub = new CustomHub();
   const opened: string[] = [];
+  hub.app = app;
   hub.handle = handle;
   hub.store = store;
   hub.openCalculator = (id) => {
@@ -139,24 +146,24 @@ async function mountHub(
 }
 
 describe('CustomLibrary', () => {
-  it('registers saved customs with the category handle', () => {
+  it('registers saved customs with the category handle', async () => {
     const handle = makeHandle();
     const store = new CustomStore(new MemoryStorage());
     store.save(sampleCustom());
     const library = new CustomLibrary(handle, store, catalog);
 
-    library.refresh();
+    await library.refresh();
 
     expect(handle.get('double-add')).toBeDefined();
     expect(library.entries()).toHaveLength(1);
     expect(library.entries()[0]?.problem).toBeNull();
   });
 
-  it('lists a broken custom with its problem and does not register it', () => {
+  it('lists a broken custom with its problem and does not register it', async () => {
     const handle = makeHandle();
     const store = new CustomStore(new MemoryStorage());
     const broken: CustomDefinition = {
-      version: 1,
+      version: 2,
       id: 'broken',
       title: 'Broken',
       steps: [
@@ -164,7 +171,7 @@ describe('CustomLibrary', () => {
           kind: 'subcalc',
           id: 'x',
           label: 'X',
-          calculatorId: 'nope',
+          calculatorRef: 'math:nope',
           config: {},
           values: {},
           variables: {},
@@ -174,59 +181,61 @@ describe('CustomLibrary', () => {
     store.save(broken);
     const library = new CustomLibrary(handle, store, catalog);
 
-    library.refresh();
+    await library.refresh();
 
     expect(handle.get('broken')).toBeUndefined();
     expect(library.entries()[0]?.problem).toMatch(/unknown subcalculator/i);
   });
 
-  it('imports a custom under a unique id', () => {
+  it('imports a custom under a unique id', async () => {
     const handle = makeHandle();
     const store = new CustomStore(new MemoryStorage());
     store.save(sampleCustom());
     const library = new CustomLibrary(handle, store, catalog);
-    library.refresh();
+    await library.refresh();
 
-    const created = library.create(sampleCustom());
+    const created = await library.create(sampleCustom());
 
     expect(created.id).toBe('double-add-2');
     expect(handle.get('double-add-2')).toBeDefined();
     expect(store.list()).toHaveLength(2);
   });
 
-  it('unregisters a removed custom', () => {
+  it('unregisters a removed custom', async () => {
     const handle = makeHandle();
     const store = new CustomStore(new MemoryStorage());
     store.save(sampleCustom());
     const library = new CustomLibrary(handle, store, catalog);
-    library.refresh();
+    await library.refresh();
 
-    library.remove('double-add');
+    await library.remove('double-add');
 
     expect(handle.get('double-add')).toBeUndefined();
     expect(store.list()).toEqual([]);
   });
 
-  it('surfaces a storage read error without throwing', () => {
+  it('surfaces a storage read error without throwing', async () => {
     const library = new CustomLibrary(
       makeHandle(),
       new CustomStore(new UnreadableStorage()),
       catalog,
     );
 
-    library.refresh();
+    await library.refresh();
 
     expect(library.error).toMatch(/storage unavailable/);
     expect(library.entries()).toEqual([]);
   });
 
-  it('offers nothing and refuses to save without a store', () => {
+  it('offers nothing and refuses to save without a store', async () => {
     const library = new CustomLibrary(makeHandle(), null, catalog);
-    library.refresh();
+    await library.refresh();
 
     expect(library.entries()).toEqual([]);
     expect(library.error).toBeNull();
-    expect(() => library.create(sampleCustom())).toThrow(CustomStorageError);
+    await expect(library.create(sampleCustom())).rejects.toThrow(
+      CustomStorageError,
+    );
   });
 });
 
@@ -331,6 +340,8 @@ describe('custom editor', () => {
       hub,
       'calc-calculator-browser',
     );
+    clickTestId(browser, 'choose-category-math');
+    await flush();
     clickTestId(browser, 'choose-multiply');
     await flush();
 
@@ -346,10 +357,13 @@ describe('custom editor', () => {
     // Second step: add 4 to the product wired from the first step.
     clickTestId(hub, 'add-subcalc');
     await flush();
-    clickTestId(
-      queryOne<CalculatorBrowserDialog>(hub, 'calc-calculator-browser'),
-      'choose-add',
+    const secondBrowser = queryOne<CalculatorBrowserDialog>(
+      hub,
+      'calc-calculator-browser',
     );
+    clickTestId(secondBrowser, 'choose-category-math');
+    await flush();
+    clickTestId(secondBrowser, 'choose-add');
     await flush();
 
     typeInto(stepDialog, 'value-value2', '4');

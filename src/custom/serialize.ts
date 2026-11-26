@@ -85,7 +85,7 @@ function parseStep(value: unknown, index: number): CustomStep {
       return {
         kind: 'subcalc',
         ...shared,
-        calculatorId: requireString(value, 'calculatorId', where),
+        calculatorRef: requireString(value, 'calculatorRef', where),
         config: parseConfig(value['config'], where),
         values: parseState(value['values'], where),
         variables: parseVariables(value['variables'], where),

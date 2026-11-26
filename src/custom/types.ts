@@ -2,7 +2,7 @@ import type { UnitSymbol } from '../framework/units.js';
 import type { CalculatorConfig, CalcState } from '../framework/types.js';
 
 /** Version of the saved custom-calculator format. */
-export const CUSTOM_VERSION = 1;
+export const CUSTOM_VERSION = 2;
 
 /** Variable name used by a standalone value or text step. */
 export const STEP_VALUE_NAME = 'value';
@@ -34,13 +34,13 @@ interface StepBase {
 }
 
 /**
- * One instance of a catalog calculator. Two steps may share a calculator id
- * while keeping separate settings and values.
+ * One instance of a catalog calculator. Two steps may share a calculator
+ * reference while keeping separate settings and values.
  */
 export interface SubcalcStep extends StepBase {
   readonly kind: 'subcalc';
-  /** Id of the catalog entry this step instantiates. */
-  readonly calculatorId: string;
+  /** "category:id" reference to the catalog entry this step instantiates. */
+  readonly calculatorRef: string;
   /** Settings that shape the step's variable list. */
   readonly config: CalculatorConfig;
   /** Starting values, keyed by the subcalculator's local variable names. */
@@ -106,6 +106,34 @@ export function parseWirePath(path: string): WireTarget | null {
     return null;
   }
   return { stepId, variable };
+}
+
+/** A catalog reference split into the category and the calculator within it. */
+export interface CatalogRef {
+  readonly categoryId: string;
+  readonly calculatorId: string;
+}
+
+/** Builds the "category:id" reference to a catalog calculator. */
+export function catalogRef(categoryId: string, calculatorId: string): string {
+  return `${categoryId}:${calculatorId}`;
+}
+
+/**
+ * Splits a "category:id" reference into its parts. Returns null when the
+ * reference is not of that form.
+ */
+export function parseCatalogRef(ref: string): CatalogRef | null {
+  const colon = ref.indexOf(':');
+  if (colon <= 0 || colon === ref.length - 1) {
+    return null;
+  }
+  const categoryId = ref.slice(0, colon);
+  const calculatorId = ref.slice(colon + 1);
+  if (calculatorId.includes(':')) {
+    return null;
+  }
+  return { categoryId, calculatorId };
 }
 
 /**

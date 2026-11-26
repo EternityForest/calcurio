@@ -4,14 +4,14 @@ import { customFromJson, parseCustom } from './serialize.js';
 import type { CustomDefinition } from './types.js';
 
 /** localStorage key holding every saved custom. */
-export const CUSTOM_STORAGE_KEY = 'calcurio.customs.v1';
+export const CUSTOM_STORAGE_KEY = 'calcurio.customs.v2';
 /** Most customs a single browser profile may keep. */
 export const MAX_CUSTOMS = 200;
 /** Longest title kept from a saved or imported custom. */
 export const MAX_CUSTOM_TITLE_LENGTH = 80;
 
 interface StoredCustoms {
-  readonly version: 1;
+  readonly version: 2;
   readonly customs: CustomDefinition[];
 }
 
@@ -61,7 +61,7 @@ export class CustomStore {
     } else {
       customs[existing] = parsed;
     }
-    this.writeIndex({ version: 1, customs });
+    this.writeIndex({ version: 2, customs });
     return parsed;
   }
 
@@ -71,7 +71,7 @@ export class CustomStore {
       throw new CustomStorageError('That custom no longer exists.');
     }
     const customs = index.customs.filter((custom) => custom.id !== id);
-    this.writeIndex({ version: 1, customs });
+    this.writeIndex({ version: 2, customs });
   }
 
   /**
@@ -92,7 +92,7 @@ export class CustomStore {
       id: uniqueId(parsed.id, taken),
     };
     this.writeIndex({
-      version: 1,
+      version: 2,
       customs: [...index.customs, unique],
     });
     return unique;
@@ -114,7 +114,7 @@ export class CustomStore {
       );
     }
     if (raw === null || raw === '') {
-      return { version: 1, customs: [] };
+      return { version: 2, customs: [] };
     }
 
     let parsed: unknown;
@@ -145,7 +145,7 @@ function parseIndex(value: unknown): StoredCustoms {
   if (!isRecord(value)) {
     throw new CustomStorageError('Custom data must be an object.');
   }
-  if (value['version'] !== 1) {
+  if (value['version'] !== 2) {
     throw new CustomStorageError(
       'Custom data has an unsupported version and was not changed.',
     );
@@ -164,7 +164,7 @@ function parseIndex(value: unknown): StoredCustoms {
       );
     }
   });
-  return { version: 1, customs };
+  return { version: 2, customs };
 }
 
 /** Trims the title and applies the length limit. */

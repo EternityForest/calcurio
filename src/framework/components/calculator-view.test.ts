@@ -75,6 +75,17 @@ function cycleDefinition(): CalculatorDefinition {
   };
 }
 
+function wiredDefinition(): CalculatorDefinition {
+  return {
+    id: 'wired',
+    title: 'Wired',
+    variables: [
+      { name: 'a', label: 'A', unit: 'V' },
+      { name: 'b', label: 'B', unit: 'V', takeFrom: 'a' },
+    ],
+  };
+}
+
 async function mount(
   runtime: CalculatorRuntime,
   bookmarks: BookmarkStore | null,
@@ -98,6 +109,13 @@ describe('CalculatorView', () => {
     expect(view.textContent).toContain('Doubling');
     expect(view.textContent).toContain('Doubles a value.');
     expect(view.querySelectorAll('calc-variable-field')).toHaveLength(2);
+  });
+
+  it('marks a wired field without showing where it comes from', async () => {
+    const view = await mount(new CalculatorRuntime(wiredDefinition()), null);
+    const field = view.querySelector('[data-variable="b"]');
+    expect(field?.classList.contains('highlight')).toBe(true);
+    expect(view.textContent).not.toContain('Taken from');
   });
 
   it('renders compute errors', async () => {

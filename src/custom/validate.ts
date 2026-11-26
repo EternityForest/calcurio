@@ -103,14 +103,14 @@ function subcalcProblems(
   catalog: CalculatorCatalog,
 ): string[] {
   const problems: string[] = [];
-  const entry = catalog.get(step.calculatorId);
+  const entry = catalog.get(step.calculatorRef);
   if (entry === undefined) {
-    problems.push(`${where}: unknown subcalculator "${step.calculatorId}".`);
+    problems.push(`${where}: unknown subcalculator "${step.calculatorRef}".`);
     return problems;
   }
   if (!catalog.accepts(entry.definition)) {
     problems.push(
-      `${where}: "${step.calculatorId}" cannot be embedded because it runs ` +
+      `${where}: "${step.calculatorRef}" cannot be embedded because it runs ` +
         'an asynchronous simulation.',
     );
   }

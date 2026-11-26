@@ -50,6 +50,14 @@ describe('fluids table', () => {
     expect(fluid('propylene-glycol-50')['viscosityA']).toBeNull();
     expect(fluid('mineral-oil')['viscosityE']).toBeNull();
   });
+
+  it('carries a reference viscosity for every fluid at 20 °C', () => {
+    for (const row of fluidsTable.rows) {
+      expect(requireNumber(row, 'viscosity')).toBeGreaterThan(0);
+    }
+    expect(fluid('water')['viscosity']).toBeCloseTo(0.001002, 9);
+    expect(fluid('propylene-glycol-50')['viscosity']).toBeCloseTo(0.0046, 9);
+  });
 });
 
 describe('dippr101', () => {

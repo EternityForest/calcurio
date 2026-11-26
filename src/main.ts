@@ -4,9 +4,12 @@ import './styles.css';
 
 import { app } from './app.js';
 import { CalcApp } from './framework/components/calc-app.js';
+import { registerServiceWorker } from './pwa.js';
 
 const widget = document.querySelector('calc-app');
 if (!(widget instanceof CalcApp)) {
   throw new Error('The page must contain a <calc-app> element.');
 }
 widget.app = app;
+
+registerServiceWorker();

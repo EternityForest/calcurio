@@ -7,22 +7,26 @@ import type { TableDefinition } from '../../framework/types.js';
  * pascals and viscosity in pascal seconds for a temperature in kelvin.
  *
  * The remaining columns are single reference values at 20 °C (293.15 K): the
- * gases are at 1 atm. Vapor pressure and viscosity are only defined for the
- * pure substances, so the glycol mixtures and mineral oil leave those
- * coefficients empty; the correlation ranges are the substances' own.
+ * gases are at 1 atm. `viscosity` is a plain reference value in the same unit
+ * as the DIPPR fit, there for the calculators that only need the fluid's
+ * viscosity at room temperature and never touch the correlation. Vapor
+ * pressure and the DIPPR viscosity are only defined for the pure substances,
+ * so the glycol mixtures and mineral oil leave those coefficients empty; the
+ * correlation ranges are the substances' own.
  *
  * Sources: DIPPR 101 fits collected in the Clapeyron.jl and chemicals
- * databases (Perry's 8th edition table 2-313 for the liquid viscosities), and
+ * databases (Perry's 8th edition table 2-313 for the liquid viscosities),
  * Melinder's glycol/water property tables (via CoolProp 8.0) for the
- * mixtures.
+ * mixtures, and standard reference values at 20 °C for the gases and the
+ * mineral oil.
  */
 export const fluidsTable: TableDefinition = {
   id: 'fluids',
   title: 'Fluids',
   description:
     'Common working fluids with their DIPPR equation 101 vapor-pressure and ' +
-    'viscosity coefficients, plus reference density, specific heat, thermal ' +
-    'conductivity, and thermal expansion at 20 °C.',
+    'viscosity coefficients, plus reference dynamic viscosity, density, ' +
+    'specific heat, thermal conductivity, and thermal expansion at 20 °C.',
   keyColumn: 'id',
   labelColumn: 'label',
   columns: [
@@ -89,6 +93,12 @@ export const fluidsTable: TableDefinition = {
       description: 'DIPPR 101 constant E for dynamic viscosity.',
     },
     {
+      key: 'viscosity',
+      label: 'Viscosity',
+      unit: 'Pa·s',
+      description: 'Dynamic viscosity at 20 °C.',
+    },
+    {
       key: 'density',
       label: 'Density',
       unit: 'kg/m3',
@@ -127,6 +137,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: 5.866,
       viscosityD: -5.879e-29,
       viscosityE: 10.0,
+      viscosity: 0.001002,
       density: 998.2,
       specificHeat: 4182,
       thermalConductivity: 0.598,
@@ -145,6 +156,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: 1.784,
       viscosityD: -6.2382e-22,
       viscosityE: 10.0,
+      viscosity: 1.825e-5,
       density: 1.204,
       specificHeat: 1005,
       thermalConductivity: 0.0257,
@@ -163,6 +175,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: -5.1551,
       viscosityD: 0,
       viscosityE: 0,
+      viscosity: 1.76e-5,
       density: 1.165,
       specificHeat: 1040,
       thermalConductivity: 0.0258,
@@ -181,6 +194,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: null,
       viscosityD: null,
       viscosityE: null,
+      viscosity: 0.03,
       density: 880,
       specificHeat: 1900,
       thermalConductivity: 0.13,
@@ -199,6 +213,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: 1.2435,
       viscosityD: 2.4998e12,
       viscosityE: -5.0,
+      viscosity: 0.0209,
       density: 1113,
       specificHeat: 2410,
       thermalConductivity: 0.252,
@@ -217,6 +232,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: 130.79,
       viscosityD: -0.15449,
       viscosityE: 1.0,
+      viscosity: 0.0576,
       density: 1036,
       specificHeat: 2480,
       thermalConductivity: 0.2,
@@ -235,6 +251,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: null,
       viscosityD: null,
       viscosityE: null,
+      viscosity: 0.0024,
       density: 1023.8,
       specificHeat: 3857,
       thermalConductivity: 0.4444,
@@ -253,6 +270,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: null,
       viscosityD: null,
       viscosityE: null,
+      viscosity: 0.0032,
       density: 1032.3,
       specificHeat: 3707,
       thermalConductivity: 0.4003,
@@ -271,6 +289,7 @@ export const fluidsTable: TableDefinition = {
       viscosityC: null,
       viscosityD: null,
       viscosityE: null,
+      viscosity: 0.0046,
       density: 1039.1,
       specificHeat: 3530,
       thermalConductivity: 0.3595,

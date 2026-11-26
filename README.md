@@ -75,7 +75,7 @@ src/
     e-series.ts         E3-E24 resistor and capacitor tables, built on demand
     index.ts            category module entry
   categories/mechanical/    cable tension and stored energy
-    catenary.ts         anchor force of a sagging cable
+    catenary.ts         anchor force and chain length of a sagging cable
     raised-weight-energy.ts     gravitational energy of a raised mass
     index.ts            category module entry
   categories/fluids/    working-fluid properties and flow
@@ -84,6 +84,7 @@ src/
     volume-and-weight.ts        volume and weight from a fluid's density
     orifice-flow.ts     discharge through an orifice under a head
     pipe-flow.ts        flow, velocity, and diameter in a full pipe
+    pipe-pressure-drop.ts       pressure loss along a pipe at a flow rate
     index.ts            category module entry
   categories/physics/   wave propagation and the speed of light
     wave-media.ts       propagation-medium table (speed and impedance)
@@ -136,6 +137,12 @@ src/
     store.ts            localStorage persistence
   app.ts                category manifest and app singleton
   main.ts               imports CSS and mounts the widget
+  pwa.ts                registers the service worker in production builds
+public/                 copied verbatim into the build root
+  manifest.webmanifest  web app manifest (installability)
+  sw.js                 hand-written service worker (offline app shell)
+  favicon-32.png        browser tab icon
+  icons/                installed-app icons (192, 512, maskable, Apple)
 ```
 
 ### Calculators are data
@@ -353,7 +360,10 @@ fluids — water, air, nitrogen, mineral oil, ethylene glycol, neat propylene
 glycol, and propylene-glycol/water mixtures at 30 %, 40 %, and 50 %. The
 table stores each fluid's vapor-pressure and dynamic-viscosity coefficients
 for DIPPR equation 101, plus reference density, specific heat, thermal
-conductivity, and thermal expansion at 20 °C.
+conductivity, thermal expansion, and dynamic viscosity at 20 °C. The 20 °C
+viscosity is a literal reference value, held for every fluid (the mixtures
+and mineral oil included) so a single lookup always yields a viscosity even
+where the DIPPR correlation is not fitted.
 
 DIPPR equation 101 is the standard five-parameter correlation
 
@@ -372,7 +382,13 @@ discharge under a falling head, `Q = Cd·A·√(2gh)`, with the area taken from
 the orifice diameter and the discharge coefficient defaulting to 0.62 for a
 sharp-edged opening. **Pipe flow** relates the pipe diameter, the mean
 velocity, and the flow rate through `Q = A·v` for a full pipe: enter any two
-and Calculate the third.
+and Calculate the third. **Pipe pressure drop** takes a fluid from the table
+(its density and viscosity fill in automatically), a pipe bore, length, and
+roughness, and a volumetric flow rate, then gives the velocity, Reynolds
+number, Darcy friction factor, and pressure loss through the Darcy–Weisbach
+equation `Δp = f·(L/D)·(ρ·v²/2)`, with `f` from `64/Re` in laminar flow and
+from the Colebrook–White correlation (solved by fixed-point iteration,
+seeded by Swamee–Jain) when turbulent.
 
 ### Conversions
 
@@ -416,14 +432,19 @@ expression field.
 
 The **Mechanical** category covers static loads and stored energy.
 **Catenary (chain curve)** gives the tension each anchor of a sagging cable
-carries: enter the horizontal span, the droop at the centre, the load hung at
-midspan, and the total weight of the chain or rope. The horizontal tension
-takes the small-sag cable approximation `H = P·W/(4·D) + Q·W/(8·D)` (span
-`W`, droop `D`, centre load `P`, rope weight `Q`), and the vertical reaction
-carries half the total weight; the anchor force is their vector sum. Entering
-the rope's total weight is usually the easiest figure to measure. **Energy
-stored in a raised weight** gives the gravitational potential energy of a
-mass lifted by a height, `m·g·h`; gravity defaults to standard gravity
+carries and the total length of the cable along its curve: enter the
+horizontal span, the droop at the centre, the load hung at midspan, and the
+total weight of the chain or rope. Rather than the small-sag parabola, the
+solver uses the true catenary shape — a centre load splits the cable into two
+catenary segments, and the horizontal tension that reproduces the given droop
+is found by bisection — so the result holds for deep as well as shallow sag.
+The vertical reaction carries half the total weight, the anchor force is the
+vector sum of the two components, and the arc length follows from the tension
+and the rope's weight per unit length, `L = Q·a/H` with catenary parameter
+`a = H/w`. Entering the rope's total weight is usually the easiest figure to
+measure, and a weightless cable reduces to the ordinary triangle of forces.
+**Energy stored in a raised weight** gives the gravitational potential energy
+of a mass lifted by a height, `m·g·h`; gravity defaults to standard gravity
 (9.80665 m/s²) but can be changed for another location.
 
 ### Physics
@@ -587,6 +608,28 @@ simulator:
 for a linear circuit and once for one with a saturating inductor and DC-bias
 capacitors, and checks the physics (both capacitors settle to the supply, the
 load capacitor overshoots, and every sample stays finite).
+
+## Installing as an app (PWA)
+
+Calcurio is an installable progressive web app. It leans on the browser's own
+install UI — no in-page "Add to home screen" prompt — via a few standard
+pieces:
+
+- `public/manifest.webmanifest` gives the app its name, colours, and 192/512
+  `any` icons plus a 512 `maskable` icon, with all paths relative to the
+  deployment (`start_url` and `scope` are `./`, so a GitHub Pages sub-path
+  works unchanged). `index.html` links the manifest and adds `theme-color`
+  and the Apple touch-icon/meta tags.
+- `public/sw.js` is a hand-written service worker. It is deliberately a thin
+  pass-through: navigations are network-first (falling back to the cached
+  shell when offline), same-origin GET assets are cache-first, and everything
+  else — other methods, other origins — is left entirely to the browser. When
+  it does cache a response it keeps only the most recent 300 entries,
+  evicting the oldest in insertion order.
+- `src/pwa.ts` registers `sw.js` on `load`, and only in a production build
+  (`import.meta.env.PROD`), so `vite dev` is never cached.
+
+The icons are generated from `calcurio.avif` into `public/icons/`.
 
 ## Deploying to GitHub Pages
 

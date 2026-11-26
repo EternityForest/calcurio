@@ -1,8 +1,14 @@
 # Calcurio
 
+![AI generated image of a man looking at a clockwork mechanical computer](calcurio.avif)
+
 An embeddable calculator framework plus a static, client-side calculator
 site built with it. Everything runs in the browser; there is no server and
-no data leaves the device. Bookmarks are stored in `localStorage`.
+no data leaves the device(Except a few features, like currency conversion). Bookmarks are stored in `localStorage`.
+
+USE AT YOUR OWN RISK: No guarantee of accuracy! Some models, like capacitor bias, almost certainly need improvement.
+
+Use the app here: https://eternityforest.github.io/calcurio/
 
 ## Quick start
 
@@ -42,111 +48,6 @@ so a visitor only downloads the calculators they open.
 
 The widget renders in the light DOM so the global `barrel.css` stylesheet can
 style it, and it uses native `<dialog>` for the bookmark popover.
-
-## Project layout
-
-```
-src/
-  framework/            UI-independent core
-    types.ts            CalculatorDefinition, VariableDefinition, CalcState
-    units.ts            convert-units wrapper plus resistance/inductance/capacitance/temperature
-    runtime.ts          state, compute order, refinement, validation
-    tables.ts           table registry and validation
-    app.ts              category registry and lazy loading
-    bookmarks.ts        localStorage persistence
-    testing.ts          calculator test-case harness
-    components/         Lit elements (app shell, calculator view, fields, dialog)
-  models/               shared component models, with their data tables
-    inductor-types.ts   inductor saturation table and L(i) law
-    capacitor-types.ts  capacitor DC-bias table and C(V) law
-    materials.ts        shared solids/liquids table and heat helpers
-  categories/electrical/    everyday electrical calculations
-    ohms-law.ts         calculator definition (pure data)
-    voltage-divider.ts  two-resistor divider with E-series selection
-    low-pass-rlc.ts     low-pass RLC, RC, and LC filter
-    high-pass-rlc.ts    high-pass RLC, RC, and LC filter
-    inductor-impedance.ts       reactance of an inductor at a frequency
-    capacitor-impedance.ts      reactance of a capacitor at a frequency
-    inductance-at-bias.ts       inductance of a part at a current
-    capacitance-at-dc-bias.ts   capacitance of a part at a DC bias
-    wire-gauge.ts       wire-gauge geometry table
-    wire-metals.ts      conductor resistivity table
-    wire-resistance.ts  resistance of a wire from its gauge and metal
-    friis.ts            Friis free-space path loss
-    e-series.ts         E3-E24 resistor and capacitor tables, built on demand
-    index.ts            category module entry
-  categories/mechanical/    cable tension and stored energy
-    catenary.ts         anchor force and chain length of a sagging cable
-    raised-weight-energy.ts     gravitational energy of a raised mass
-    index.ts            category module entry
-  categories/materials/  solids and liquids, heat, and volume vs weight
-    energy-and-temperature-change.ts  sensible heat Q = mcΔT
-    phase-change-heat.ts        latent heat across a phase boundary
-    volume-vs-weight.ts         volume and weight from a material's density
-    index.ts            category module entry
-  categories/fluids/    working-fluid flow
-    orifice-flow.ts     discharge through an orifice under a head
-    pipe-flow.ts        flow, velocity, and diameter in a full pipe
-    pipe-pressure-drop.ts       pressure loss along a pipe at a flow rate
-    index.ts            category module entry
-  categories/physics/   wave propagation and the speed of light
-    wave-media.ts       propagation-medium table (speed and impedance)
-    wavelengths.ts      common wavelengths with their uses
-    speed-of-light.ts   speed, frequency, wavelength, and travel time
-    index.ts            category module entry
-  categories/conversions/   everyday conversions between equivalent units
-    equivalent-units.ts builds a set of mutually-equivalent variables
-    length.ts           centimetres, inches, feet
-    volume.ts           gallons, litres, cubic feet
-    temperature.ts      Celsius, Fahrenheit, kelvin
-    weight.ts           kilograms, pounds, ounces
-    speed.ts            km/h, mph, ft/s, m/s
-    index.ts            category module entry
-  categories/math/      arithmetic primitives
-    arithmetic.ts       shared operand builder and "slots" config
-    add.ts              sum of two to ten values
-    subtract.ts         difference of two values
-    multiply.ts         product of two to ten values
-    divide.ts           quotient of two values
-    expression.ts       general expression evaluator (expr-eval)
-    index.ts            category module entry
-  categories/custom/    user-built multistep calculations
-    library.ts          keeps registered calculators in step with storage
-    hub.ts              lists saved customs, opens creator and importer
-    editor.ts           edits one custom's steps
-    step-dialog.ts      edits a step's settings, wiring, and visibility
-    browser-dialog.ts   picks a catalog calculator to embed
-    import-dialog.ts    pastes or chooses exported JSON
-    export-dialog.ts    shows a custom as copyable JSON
-    index.ts            category module entry
-  categories/spice/     ngspice-backed transient simulations
-    circuit.ts          netlist builder (pure data)
-    rawfile.ts          binary rawfile parser
-    metrics.ts          peaks and dissipated energy
-    run.ts              batches ngspice in the current context
-    ngspice.worker.ts   worker entry hosting the WebAssembly build
-    simulate.ts         worker client (cancellable)
-    decimate.ts         min/max envelope for plotting
-    chart.ts            Chart.js graph of the waveforms
-    inrush.ts           inrush transient calculator definition
-    index.ts            category module entry
-  custom/               the custom-calculator model (pure data)
-    types.ts            step kinds, wires, and wire paths
-    catalog.ts          embeddable calculators and their tables
-    steps.ts            config helpers, field lists, and wire options
-    validate.ts         custom, wire, and table validation
-    compile.ts          custom definition -> CalculatorDefinition
-    serialize.ts        JSON export and import
-    store.ts            localStorage persistence
-  app.ts                category manifest and app singleton
-  main.ts               imports CSS and mounts the widget
-  pwa.ts                registers the service worker in production builds
-public/                 copied verbatim into the build root
-  manifest.webmanifest  web app manifest (installability)
-  sw.js                 hand-written service worker (offline app shell)
-  favicon-32.png        browser tab icon
-  icons/                installed-app icons (192, 512, maskable, Apple)
-```
 
 ### Calculators are data
 
@@ -298,178 +199,6 @@ base unit, and displayed values are converted back out. A variable may set
 is still stored in `unit`, so the capacitors store farads but start in
 microfarads.
 
-### Component models
-
-`src/models` holds the shared, data-driven models for real parts. Each file
-pairs an approximate reference table with the maths that turns a rating into
-a curve, so the same numbers feed the calculators, the tables dialog, and the
-SPICE netlist.
-
-- `inductor-types.ts` lists magnetic materials and constructions (air,
-  ferrite, powdered iron, Sendust, MPP, high flux, nanocrystalline). The
-  saturation law is the behavioural rational form
-  `L(i) = L∞ + (L0 − L∞) / (1 + (|i| / I_k)^p)`: `L0` is the rated
-  inductance, `L∞` the residual inductance left at very high current, `I_k`
-  the knee current at which the drop is halfway, and `p` the knee sharpness.
-  The ΔL column is the fraction of inductance lost at the rated saturation
-  current, so the convention that defines that current (typically a 10–30 %
-  drop, depending on material) must match the datasheet. Air core never
-  saturates, so its model stays linear.
-- `capacitor-types.ts` lists dielectric and package classes (C0G/NP0, X5R,
-  X7R, X8R, X7T, aluminium, tantalum). Packages are named imperial/metric
-  (e.g. 0402/1005) so the size is unambiguous. The DC-bias law is the
-  matching form `C(V) = Csat + (C0 − Csat) / (1 + (|V| / V0)^n)`. Class-2
-  ceramics lose capacitance as they are biased; the knee voltage `V0` and
-  the residual `Csat` come from the rated capacitance per active volume, the
-  dielectric constant k, and a form modifier, fitted to 10 µF / 10 V X5R
-  package anchors, with `V0` capped at 1.5× the voltage rating. C0G and the
-  electrolytics are linear.
-
-The inductor tables quote the rated saturation current at 25 °C and a
-derating figure at 100 °C; the temperature inputs interpolate linearly
-between the two, which the field descriptions note. Because the laws appear
-twice — once in TypeScript for the calculator outputs and once as ngspice
-behavioural sources (`BL … ddt(i)` and `Bcap … ddt(v)`) in the netlist — the
-closed-form and simulated curves agree; keep the two in step.
-
-The Electrical category uses the models directly in two calculators,
-**Inductance at a current bias** and **Capacitance at a DC bias**, which the
-SPICE inrush transient then builds on.
-
-### Electrical calculators
-
-Alongside Ohm's law and the component-bias models, the **Electrical** category
-adds a two-resistor **Voltage divider** (type each resistance or pick one
-from the E-series tables; it reports the output voltage and a read-only
-divider ratio), **Low-pass** and **High-pass RLC filters** (set the
-inductance to zero to collapse to the RC case, or the resistance to zero for
-the undamped LC case; each reports the time constant and the -3 dB
-frequency), **Inductor** and **Capacitor impedance** at a frequency (enter
-any two of frequency, component value, and impedance, then Calculate the
-third), and **Wire resistance**, which sets the conductor geometry from the
-wire-gauge table (or from a typed cross-section, diameter, or radius) and the
-resistivity from the metal table to give the resistance.
-
-**Friis path loss** gives the free-space loss of a radio link,
-`20 log10(4πdf/c)`, from the carrier frequency and the link distance. It
-reports the free-space wavelength at that frequency as a convenience. The
-transmit power and the two antenna gains are recorded inputs that do not
-change the loss — the calculator only works out the loss.
-
-### Fluids and DIPPR equation 101
-
-The **Fluids** category carries thermophysical data for common working
-fluids — water, air, nitrogen, mineral oil, ethylene glycol, neat propylene
-glycol, and propylene-glycol/water mixtures at 30 %, 40 %, and 50 %. The
-table stores each fluid's vapor-pressure and dynamic-viscosity coefficients
-for DIPPR equation 101, plus reference density, specific heat, thermal
-conductivity, thermal expansion, and dynamic viscosity at 20 °C. The 20 °C
-viscosity is a literal reference value, held for every fluid (the mixtures
-and mineral oil included) so a single lookup always yields a viscosity even
-where the DIPPR correlation is not fitted.
-
-DIPPR equation 101 is the standard five-parameter correlation
-
-    Y = exp(A + B/T + C·ln T + D·T^E)
-
-with the temperature in kelvin. `dippr-101.ts` implements it once, and the
-same function evaluates both property sets, so the vapor-pressure
-coefficients return pascals and the viscosity coefficients return pascal
-seconds. Vapor pressure and viscosity are only fitted for the pure
-substances, so the glycol mixtures and mineral oil leave those cells empty.
-
-The category's calculators reach both the fluid data and the flow physics.
-**Volume and weight** sets a fluid's density from the table; entering either
-a volume or a weight then gives the other. **Orifice flow** gives the
-discharge under a falling head, `Q = Cd·A·√(2gh)`, with the area taken from
-the orifice diameter and the discharge coefficient defaulting to 0.62 for a
-sharp-edged opening. **Pipe flow** relates the pipe diameter, the mean
-velocity, and the flow rate through `Q = A·v` for a full pipe: enter any two
-and Calculate the third. **Pipe pressure drop** takes a fluid from the table
-(its density and viscosity fill in automatically), a pipe bore, length, and
-roughness, and a volumetric flow rate, then gives the velocity, Reynolds
-number, Darcy friction factor, and pressure loss through the Darcy–Weisbach
-equation `Δp = f·(L/D)·(ρ·v²/2)`, with `f` from `64/Re` in laminar flow and
-from the Colebrook–White correlation (solved by fixed-point iteration,
-seeded by Swamee–Jain) when turbulent.
-
-### Conversions
-
-The **Conversions** category turns the equivalent-variables idea into
-standalone calculators: length (centimetres, inches, feet), volume (gallons,
-litres, cubic feet), temperature (Celsius, Fahrenheit, kelvin), weight
-(kilograms, pounds, ounces), and speed (km/h, mph, ft/s, m/s). Each is a set
-of two or more variables that are all the same quantity, so entering any one
-fills the rest and there is nothing to solve for.
-
-`equivalent-units.ts` builds those variables from a list of units, wiring
-every pair together with a `convertUnit` conversion. Conversions go through
-the unit system rather than a hand-written factor, so the results agree
-exactly with the unit selectors and affine temperatures carry their offset.
-Because the variables are reflections rather than formulas, these calculators
-have no `computable` values and no test cases; their tests drive the runtime
-directly.
-
-### Math
-
-The **Math** category holds the arithmetic primitives. **Add** and **Multiply**
-each combine two to ten values, with a `slots` config field choosing how many
-operands appear; **Subtract** and **Divide** always take exactly two. They use
-the same `buildVariables` pattern as everything else, so the operand count is a
-setting rather than a fixed field list.
-
-**Expression** is a general evaluator built on
-[expr-eval](https://github.com/silentmatt/expr-eval) (MIT). A formula is
-written in the always-present input `x` (default 0) plus a configurable
-number of extra inputs `a`, `b`, `c`, …, and evaluates to `y`. It supports
-the usual `+ - * / ^`, parentheses, and functions such as `sin`, `cos`,
-`sqrt`, `log`, `abs`, and `min`. expr-eval parses and evaluates without
-`eval`, and assignment, function definitions, the `in` operator, and member
-access are switched off, so a typed formula can only read the inputs it is
-offered and can never run arbitrary code. The extra-input count is a `config`
-field, so the visible input list is a setting rather than a fixed set of
-fields, and an expression naming an unknown variable is reported on the
-expression field.
-
-### Mechanical
-
-The **Mechanical** category covers static loads and stored energy.
-**Catenary (chain curve)** gives the tension each anchor of a sagging cable
-carries and the total length of the cable along its curve: enter the
-horizontal span, the droop at the centre, the load hung at midspan, and the
-total weight of the chain or rope. Rather than the small-sag parabola, the
-solver uses the true catenary shape — a centre load splits the cable into two
-catenary segments, and the horizontal tension that reproduces the given droop
-is found by bisection — so the result holds for deep as well as shallow sag.
-The vertical reaction carries half the total weight, the anchor force is the
-vector sum of the two components, and the arc length follows from the tension
-and the rope's weight per unit length, `L = Q·a/H` with catenary parameter
-`a = H/w`. Entering the rope's total weight is usually the easiest figure to
-measure, and a weightless cable reduces to the ordinary triangle of forces.
-**Energy stored in a raised weight** gives the gravitational potential energy
-of a mass lifted by a height, `m·g·h`; gravity defaults to standard gravity
-(9.80665 m/s²) but can be changed for another location.
-
-### Physics
-
-The **Physics** category covers wave propagation and the speed of light, with
-two reference tables and one calculator. The **wave media** table lists the
-speed of light and the impedance of common propagation media: the bulk
-dielectrics (vacuum, air, PTFE) and the usual coax and twisted-pair cables
-(Cat5e, RG-58, RG-316, RG-400, LMR-400). For a bulk medium the speed is the
-phase velocity and the impedance is the wave impedance; for a cable it is the
-nominal velocity factor and the characteristic impedance. The speeds are
-nominal — a cable's velocity factor depends on its dielectric, so check the
-datasheet — and each row has a distinct speed so the medium can be recovered
-from it. The **wavelengths** table lists common waves with their vacuum
-frequency and a `uses` note: the visible colours, the UV bands and germicidal
-lamps, the ISM and amateur radio bands, the common IR LED peaks, and the
-thermal-camera LWIR band.
-
-**Speed of light** ties them together. Picking a medium from the wave-media
-table sets the speed of light in it; entering the frequency then gives the
-wavelength (`λ = c/f`), and entering a distance gives the travel time
-(`t = d/c`).
 
 ### Custom calculators
 
@@ -576,41 +305,6 @@ computed, so a large sweep stays responsive and can be stopped at any time.
 Charts use [Chart.js](https://www.chartjs.org/) (MIT), loaded on demand the
 first time a plot runs.
 
-## SPICE simulations
-
-The **SPICE** category runs transient circuit simulations with
-[ngspice](https://github.com/z-wasm/ngspice-wasm) compiled to WebAssembly
-(`@o.z/ngspice-wasm`, BSD-3-Clause). Each run happens in a Web Worker, so a
-long simulation never blocks the page and can be cancelled by terminating the
-worker. The multi-megabyte WebAssembly module is code-split into its own
-chunk and only loads the first time a simulation runs; nothing is sent to a
-server.
-
-The first calculator, **Inrush Transient**, switches a supply voltage through
-a series inductance and resistance onto a capacitor, with a second capacitor
-behind its own resistance in parallel. Pick the inductor material and each
-capacitor's dielectric to bring in the saturation and DC-bias models, enter
-the parts' rated values and voltage ratings, and set the operating
-temperature. It reports the peak load-capacitor voltage, the peak series
-current, and the energy dissipated in each resistance, and graphs the series
-current and capacitor voltage over the run. The time step (default 100 ns)
-and simulation length (default 100 ms) are adjustable.
-
-The pipeline is deliberately split so most of it is testable without the
-simulator:
-
-- `circuit.ts` builds the netlist as plain text: linear parts emit native
-  `L`/`C` elements, while saturating inductors and DC-bias capacitors emit
-  behavioural sources carrying the `src/models` laws.
-- `run.ts` runs ngspice in the current context (Node or a worker).
-- `rawfile.ts` parses the binary rawfile into named vectors.
-- `metrics.ts` integrates those vectors into the reported numbers.
-- `simulate.ts` is the worker client, cancelled through an `AbortSignal`.
-
-`run.test.ts` exercises the real ngspice build end-to-end under Node, once
-for a linear circuit and once for one with a saturating inductor and DC-bias
-capacitors, and checks the physics (both capacitors settle to the supply, the
-load capacitor overshoots, and every sample stays finite).
 
 ## Installing as an app (PWA)
 

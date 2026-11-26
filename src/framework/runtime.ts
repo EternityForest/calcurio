@@ -791,6 +791,9 @@ export class CalculatorRuntime {
         if (this.applyWires()) {
           restart = true;
         }
+
+        // Only once
+        this.forceNames.delete(name);
       }
       if (this.applyWires()) {
         restart = true;

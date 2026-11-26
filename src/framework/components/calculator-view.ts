@@ -187,8 +187,7 @@ export class CalculatorView extends LitElement {
   ): TemplateResult {
     const name = variable.name;
     const runMode = runtime.hasComputeState;
-    // In run mode the derived numbers are results, but a table select stays a
-    // live choice: the runtime derives it too, so it must not be disabled.
+
     const output =
       runMode && runtime.isComputable(name) && !isTableSelectVariable(variable);
     const source = runtime.sourceLabel(name);
@@ -198,7 +197,10 @@ export class CalculatorView extends LitElement {
       description: variable.description ?? '',
       editable: runtime.isEditable(name) && !output,
       computable:
-        runtime.isComputable(name) && !runMode && !runtime.isWired(name),
+        runtime.isComputable(name) &&
+        !runMode &&
+        !runtime.isWired(name) &&
+        !('tableSelect' in variable && variable?.tableSelect),
       pinned: runtime.isPinned(name),
       issues: runtime.issuesFor(name).map((issue) => issue.message),
       highlight: source !== null,
@@ -211,6 +213,7 @@ export class CalculatorView extends LitElement {
         value: runtime.selectedKey(name) ?? '',
         choices: runtime.tableChoices(name),
         findClosest: runtime.canFindClosestRow(name),
+        computable: false,
       };
       return html`
         <calc-variable-field

@@ -340,7 +340,7 @@ export const inrushTransient: CalculatorDefinition = {
       label: 'Simulation length',
       unit: 'ms',
       unitOptions: ['ns', 'us', 'ms', 's'],
-      default: 100,
+      default: 2,
       description: 'How much time the simulation covers.',
     },
     {

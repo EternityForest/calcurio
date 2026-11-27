@@ -601,6 +601,7 @@ export class CalculatorRuntime {
     }
 
     if (isTextVariable(variable)) {
+      this.prepareEquivalentTextEdit(name, text);
       this.setValue(name, text);
       return { ok: true };
     }
@@ -1382,8 +1383,12 @@ export class CalculatorRuntime {
    */
   private applyEquivalents(): void {
     for (const group of this.equivalentGroups) {
-      let source: NumberVariableDefinition | undefined;
-      let knownCount = 0;
+      let numberSource: NumberVariableDefinition | undefined;
+      let stringSource: TextVariableDefinition | undefined;
+      let numberCount = 0;
+      let stringCount = 0;
+
+      // Check for number sources
       for (const name of group) {
         const value = this.values[name];
         const variable = this.variablesByName.get(name);
@@ -1393,47 +1398,113 @@ export class CalculatorRuntime {
           variable !== undefined &&
           isNumberVariable(variable)
         ) {
-          knownCount += 1;
-          source = variable;
+          numberCount += 1;
+          numberSource = variable;
         }
       }
-      if (knownCount !== 1 || source === undefined) {
-        continue;
-      }
-      const value = this.values[source.name];
-      if (typeof value !== 'number' || !Number.isFinite(value)) {
-        continue;
-      }
-      for (const [targetName, convert] of Object.entries(
-        source.equivalent ?? {},
-      )) {
-        if (targetName === source.name || this.pinnedNames.has(targetName)) {
-          continue;
-        }
-        const target = this.variablesByName.get(targetName);
-        if (target === undefined) {
-          continue;
-        }
-        if (!this.shouldAutoUpdate(targetName)) {
-          continue;
-        }
-        let next: number|string;
-        try {
-          next = convert(value);
-        } catch (error) {
-          this.addError(
-            `${source.label} could not convert to ${target.label}: ` +
-              `${errorMessage(error)}`,
-          );
-          continue;
-        }
 
-        const current = this.values[targetName] ?? null;
-        if (typeof current === 'number' && nearlyEqual(current, next)) {
+      // Check for string sources
+      for (const name of group) {
+        const value = this.values[name];
+        const variable = this.variablesByName.get(name);
+        if (
+          typeof value === 'string' &&
+          variable !== undefined &&
+          isTextVariable(variable)
+        ) {
+          stringCount += 1;
+          stringSource = variable;
+        }
+      }
+
+      // Handle number sources (number → number/string conversion)
+      if (numberCount === 1 && numberSource !== undefined) {
+        const value = this.values[numberSource.name];
+        if (typeof value !== 'number' || !Number.isFinite(value)) {
           continue;
         }
-        this.values[targetName] = next;
-        this.missingNeeds.delete(targetName);
+        for (const [targetName, convert] of Object.entries(
+          numberSource.equivalent ?? {},
+        )) {
+          if (targetName === numberSource.name || this.pinnedNames.has(targetName)) {
+            continue;
+          }
+          const target = this.variablesByName.get(targetName);
+          if (target === undefined) {
+            continue;
+          }
+          if (!this.shouldAutoUpdate(targetName)) {
+            continue;
+          }
+          let next: number | string;
+          try {
+            next = convert(value);
+          } catch (error) {
+            this.addError(
+              `${numberSource.label} could not convert to ${target.label}: ` +
+                `${errorMessage(error)}`,
+            );
+            continue;
+          }
+
+          const current = this.values[targetName] ?? null;
+          // Skip if already equal (handle both number and string comparisons)
+          if (typeof current === typeof next) {
+            if (typeof current === 'number' && nearlyEqual(current, next)) {
+              continue;
+            }
+            if (typeof current === 'string' && current === next) {
+              continue;
+            }
+          }
+          this.values[targetName] = next;
+          this.missingNeeds.delete(targetName);
+        }
+      }
+
+      // Handle string sources (string → number/string conversion)
+      if (stringCount === 1 && stringSource !== undefined) {
+        const value = this.values[stringSource.name];
+        if (typeof value !== 'string') {
+          continue;
+        }
+        for (const [targetName, convert] of Object.entries(
+          stringSource.equivalent ?? {},
+        )) {
+          if (targetName === stringSource.name || this.pinnedNames.has(targetName)) {
+            continue;
+          }
+          const target = this.variablesByName.get(targetName);
+          if (target === undefined) {
+            continue;
+          }
+          if (!this.shouldAutoUpdate(targetName)) {
+            continue;
+          }
+          let next: number | string;
+          try {
+            next = convert(value);
+          } catch (error) {
+            this.addError(
+              `${stringSource.label} could not convert to ${target.label}: ` +
+                `${errorMessage(error)}`,
+            );
+            continue;
+          }
+
+          const current = this.values[targetName] ?? null;
+          // Skip if already equal (handle both number and string comparisons)
+          if (typeof current === typeof next) {
+            if (typeof current === 'number' && nearlyEqual(current, next)) {
+              continue;
+            }
+            if (typeof current === 'string' && current === next) {
+              continue;
+            }
+          }
+          this.values[targetName] = next;
+          this.missingNeeds.delete(targetName);
+        }
       }
     }
   }
@@ -1810,6 +1881,37 @@ export class CalculatorRuntime {
     }
     const variable = this.variablesByName.get(name);
     if (variable === undefined || !isNumberVariable(variable)) {
+      return;
+    }
+    if (variable.equivalent === undefined) {
+      return;
+    }
+    const group = this.equivalentGroups.find((members) =>
+      members.includes(name),
+    );
+    if (group === undefined) {
+      return;
+    }
+    for (const member of group) {
+      if (member === name) {
+        continue;
+      }
+      this.values[member] = null;
+      this.pinnedNames.delete(member);
+      this.missingNeeds.delete(member);
+    }
+  }
+
+  /**
+   * Clear and unpin all siblings so a string change can drive the
+   * group during the next recompute.
+   */
+  private prepareEquivalentTextEdit(name: string, value: string): void {
+    if (value === null) {
+      return;
+    }
+    const variable = this.variablesByName.get(name);
+    if (variable === undefined || !isTextVariable(variable)) {
       return;
     }
     if (variable.equivalent === undefined) {

@@ -19,10 +19,10 @@ export const hexBinary: CalculatorDefinition = {
       pattern: '^[01]+$',
       equivalent: {
         hex: (value: string) => {
-          return '0x' + parseInt(value).toString(16);
+          return '0x' + Number(value).toString(16);
         },
         decimal: (value: string) => {
-          return parseInt(value)
+          return Number(value)
         },
       },
     },

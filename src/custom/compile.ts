@@ -235,9 +235,9 @@ function localState(
 /** Rewrites a subcalculator's `equivalent` targets into namespaced names. */
 function namespaceEquivalent(
   stepId: string,
-  equivalent: Readonly<Record<string, (value: number) => number>>,
-): Record<string, (value: number) => number> {
-  const result: Record<string, (value: number) => number> = {};
+  equivalent: Readonly<Record<string, (value: number) => number | string>>,
+): Record<string, (value: number) => number | string> {
+  const result: Record<string, (value: number) => number | string> = {};
   for (const [target, convert] of Object.entries(equivalent)) {
     result[globalVariableName(stepId, target)] = convert;
   }

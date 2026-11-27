@@ -27,9 +27,9 @@ export const unixTime: CalculatorDefinition = {
       ],
       equivalent: {
         unixMillis: (v: number) => v * 1000,
-        localTime: (millis: number) => {
+        localTime: (s: number) => {
           // Convert to all formats
-          const date = new Date(millis);
+          const date = new Date(s*1000);
           const tzOffset = -date.getTimezoneOffset();
           const tzSign = tzOffset >= 0 ? '+' : '-';
           const tzHours = String(Math.floor(Math.abs(tzOffset) / 60)).padStart(
@@ -89,7 +89,7 @@ export const unixTime: CalculatorDefinition = {
             throw new Error(`Invalid timestamp: ${localTs}`);
           }
 
-          return date.getTime();
+          return date.getTime()/1000;
         },
 
         unixMillis: (localTs: string) => {
@@ -101,7 +101,7 @@ export const unixTime: CalculatorDefinition = {
             throw new Error(`Invalid timestamp: ${localTs}`);
           }
 
-          return date.getTime() * 1000;
+          return date.getTime();
         },
 
         utcTime: (localTs: string) => {
@@ -132,7 +132,7 @@ export const unixTime: CalculatorDefinition = {
             throw new Error(`Invalid timestamp: ${localTs}`);
           }
 
-          return date.getTime();
+          return date.getTime()/1000;
         },
 
         unixMillis: (localTs: string) => {
@@ -144,7 +144,7 @@ export const unixTime: CalculatorDefinition = {
             throw new Error(`Invalid timestamp: ${localTs}`);
           }
 
-          return date.getTime() * 1000;
+          return date.getTime();
         },
         localTime: (utcInput: string | Date) => {
           const date =

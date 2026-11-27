@@ -61,7 +61,7 @@ export const orificeFlow: CalculatorDefinition = {
     {
       name: 'gravity',
       label: 'Gravity',
-      unit: 'm/s2',
+      unit: 'm/s^2',
       default: 9.80665,
       description: 'Acceleration due to gravity.',
       validate: (state) => {
@@ -74,7 +74,7 @@ export const orificeFlow: CalculatorDefinition = {
     {
       name: 'flowRate',
       label: 'Flow rate',
-      unit: 'm3/s',
+      unit: 'm^3/s',
       defaultDisplayUnit: 'l/min',
       editable: false,
       description: 'Volumetric flow through the orifice.',

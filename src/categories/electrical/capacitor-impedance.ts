@@ -45,7 +45,7 @@ export const capacitorImpedance: CalculatorDefinition = {
       name: 'capacitance',
       label: 'Capacitance',
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
       description: 'Capacitance of the component.',
       computable: (state) => {
         const frequency = valueOf(state, 'frequency');
@@ -69,7 +69,7 @@ export const capacitorImpedance: CalculatorDefinition = {
     {
       name: 'impedance',
       label: 'Impedance',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Reactance at the frequency.',
       computable: (state) => {
         const frequency = valueOf(state, 'frequency');

@@ -47,13 +47,13 @@ export const energyAndTemperatureChange: CalculatorDefinition = {
     {
       name: 'startTemperature',
       label: 'Start temperature',
-      unit: '°C',
+      unit: 'degC',
       description: 'Temperature before the change.',
     },
     {
       name: 'endTemperature',
       label: 'End temperature',
-      unit: '°C',
+      unit: 'degC',
       description: 'Temperature after the change.',
     },
     {
@@ -89,7 +89,7 @@ export const energyAndTemperatureChange: CalculatorDefinition = {
     {
       name: 'averageSpecificHeat',
       label: 'Average specific heat',
-      unit: 'J/(kg·K)',
+      unit: 'J/(kg K)',
       editable: false,
       description:
         'Effective specific heat over the range, equal to the heat divided by ' +

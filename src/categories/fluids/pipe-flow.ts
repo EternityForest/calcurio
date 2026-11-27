@@ -71,7 +71,7 @@ export const pipeFlow: CalculatorDefinition = {
     {
       name: 'flowRate',
       label: 'Flow rate',
-      unit: 'm3/s',
+      unit: 'm^3/s',
       defaultDisplayUnit: 'l/min',
       description: 'Volumetric flow through the pipe.',
       computable: (state) => {

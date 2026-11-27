@@ -15,7 +15,7 @@ import type { TableColumn, TableDefinition } from './types.js';
 
 describe('column kinds', () => {
   it('infers numeric columns from a unit', () => {
-    const column: TableColumn = { key: 'r', label: 'R', unit: 'Ω' };
+    const column: TableColumn = { key: 'r', label: 'R', unit: 'ohm' };
     expect(isNumericColumn(column)).toBe(true);
     expect(isTextColumn(column)).toBe(false);
     expect(isBooleanColumn(column)).toBe(false);

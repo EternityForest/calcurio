@@ -50,10 +50,29 @@ export interface VariableBase {
    * Calculate on the field.
    */
   readonly autoUpdate?: boolean;
+  /**
+   * Buttons that instantly set this variable to a computed value. The setter
+   * callback receives the current state and returns the new value.
+   */
+  readonly setterButtons?: readonly SetterButton[];
   /** Returns a message (or messages) when the value is not acceptable. */
   readonly validate?: (
     state: Readonly<CalcState>,
   ) => readonly string[] | string | void;
+}
+
+/**
+ * A button that instantly sets a variable to a computed value. The callback
+ * receives the current state and returns the new value.
+ */
+export interface SetterButton {
+  /** Label shown on the button. */
+  readonly label: string;
+  /**
+   * Computes the new value for the variable. Called with the current state.
+   * Return the value to set.
+   */
+  readonly setter: (state: Readonly<CalcState>) => CalcValue;
 }
 
 /**
@@ -103,7 +122,7 @@ export interface NumberVariableDefinition extends VariableBase {
    * whichever members a table lookup leaves blank. Only consulted when no
    * unambiguous table row matches.
    */
-  readonly equivalent?: Readonly<Record<string, (value: number) => number>>;
+  readonly equivalent?: Readonly<Record<string, (value: number) => number|string>>;
   /**
    * Value the variable starts at when no value has been stored yet. Ignored
    * for variables that can be computed from the state.
@@ -142,6 +161,8 @@ export interface TextVariableDefinition extends VariableBase {
   ) => string | MissingValue | UnchangedValue;
   /** Text the variable starts with when no value has been stored yet. */
   readonly default?: string;
+  readonly pattern?: string;
+  readonly equivalent?: Readonly<Record<string, (value: string) => number|string>>;
 }
 
 /** One value in a calculator: numeric, text, or a table row selection. */

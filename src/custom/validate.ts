@@ -6,7 +6,7 @@ import type {
   VariableDefinition,
 } from '../framework/types.js';
 import { isTableSelectVariable, isTextVariable } from '../framework/types.js';
-import { measureOf, tryDescribeUnit } from '../framework/units.js';
+import { isDimensionless, measureOf, tryDescribeUnit } from '../framework/units.js';
 import type { UnitSymbol } from '../framework/units.js';
 import { isValidIdentifier } from '../framework/validate.js';
 import type { CalculatorCatalog } from './catalog.js';
@@ -367,6 +367,10 @@ export function wireMatches(
   if (sourceKind === 'number') {
     const sourceUnit = (source as { unit: UnitSymbol }).unit;
     const targetUnit = (target as { unit: UnitSymbol }).unit;
+    // Dimensionless unit "1" is compatible with any measure
+    if (isDimensionless(sourceUnit) || isDimensionless(targetUnit)) {
+      return true;
+    }
     return measureOf(sourceUnit) === measureOf(targetUnit);
   }
   return true;

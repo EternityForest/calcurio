@@ -85,7 +85,7 @@ interface SeriesTableOptions {
   readonly title: string;
   readonly description: string;
   /** Unit the values are stored in, such as "Ω" or "F". */
-  readonly unit: 'Ω' | 'F';
+  readonly unit: 'ohm' | 'F';
   /** Smallest value to include, in `unit`. */
   readonly minValue: number;
   /** Largest value to include, in `unit`. */
@@ -151,7 +151,7 @@ export const eSeriesResistors: TableProvider = {
         'Preferred resistance values for E3, E6, E12, and E24 series ' +
         'resistors, spanning 1 mΩ to 100 MΩ. Each label names the smallest ' +
         'series the value belongs to.',
-      unit: 'Ω',
+      unit: 'ohm',
       minValue: 1e-3,
       maxValue: 100e6,
     }),

@@ -47,7 +47,7 @@ export const pcbTraceResistance: CalculatorDefinition = {
     {
       name: 'resistanceMOhms',
       label: 'Resistance',
-      unit: 'mΩ',
+      unit: 'mohm',
       description: 'Trace resistance in milliohms.',
       computable: (state) => {
         const widthMils = valueOf(state, 'widthMils');

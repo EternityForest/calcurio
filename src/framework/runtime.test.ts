@@ -171,10 +171,10 @@ describe('CalculatorRuntime', () => {
     definition.variables[0] = {
       ...definition.variables[0]!,
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
     };
     const runtime = new CalculatorRuntime(definition);
-    expect(runtime.displayUnitFor('a')).toBe('µF');
+    expect(runtime.displayUnitFor('a')).toBe('uF');
     expect(runtime.setDisplayText('a', '2')).toEqual({ ok: true });
     expect(runtime.state['a']).toBeCloseTo(2e-6, 15);
     expect(runtime.formattedValue('a')).toBe('2');
@@ -186,11 +186,11 @@ describe('CalculatorRuntime', () => {
       ...definition.variables[0]!,
       unit: 'F',
       unitOptions: ['F', 'nF'],
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
     };
     const runtime = new CalculatorRuntime(definition);
-    expect(runtime.unitChoices('a')).toEqual(['F', 'µF', 'nF']);
-    expect(runtime.displayUnitFor('a')).toBe('µF');
+    expect(runtime.unitChoices('a')).toEqual(['F', 'uF', 'nF']);
+    expect(runtime.displayUnitFor('a')).toBe('uF');
   });
 
   it('restores the default display unit on reset and loadState', () => {
@@ -198,12 +198,12 @@ describe('CalculatorRuntime', () => {
     definition.variables[0] = {
       ...definition.variables[0]!,
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
     };
     const runtime = new CalculatorRuntime(definition);
     runtime.setDisplayUnit('a', 'nF');
     runtime.reset();
-    expect(runtime.displayUnitFor('a')).toBe('µF');
+    expect(runtime.displayUnitFor('a')).toBe('uF');
 
     runtime.setDisplayUnit('a', 'nF');
     runtime.loadState({ a: 2e-6, b: 1e-6, c: null }, { a: 'nF' });
@@ -211,7 +211,7 @@ describe('CalculatorRuntime', () => {
 
     const fresh = new CalculatorRuntime(definition);
     fresh.loadState({ a: 2e-6, b: 1e-6, c: null });
-    expect(fresh.displayUnitFor('a')).toBe('µF');
+    expect(fresh.displayUnitFor('a')).toBe('uF');
   });
 
   it('rejects unavailable or incompatible display units', () => {
@@ -841,7 +841,7 @@ const materialsTable: TableDefinition = {
   columns: [
     { key: 'id', label: 'ID' },
     { key: 'label', label: 'Label' },
-    { key: 'resistivity', label: 'Resistivity', unit: 'Ω' },
+    { key: 'resistivity', label: 'Resistivity', unit: 'ohm' },
   ],
   rows: [
     { id: 'copper', label: 'Copper', resistivity: 1 },
@@ -880,7 +880,7 @@ function fieldSelectDefinition(): CalculatorDefinition {
       {
         name: 'resistivity',
         label: 'Resistivity',
-        unit: 'Ω',
+        unit: 'ohm',
         tableSelect: 'material',
         tableField: 'resistivity',
       },
@@ -900,7 +900,7 @@ const shapesTable: TableDefinition = {
   columns: [
     { key: 'id', label: 'ID' },
     { key: 'label', label: 'Label' },
-    { key: 'area', label: 'Area', unit: 'mm2' },
+    { key: 'area', label: 'Area', unit: 'mm^2' },
     { key: 'diameter', label: 'Diameter', unit: 'mm' },
   ],
   rows: [
@@ -922,7 +922,7 @@ function equivalentDefinition(): CalculatorDefinition {
       {
         name: 'area',
         label: 'Area',
-        unit: 'mm2',
+        unit: 'mm^2',
         tableSelect: 'shape',
         tableField: 'area',
         equivalent: {
@@ -1053,7 +1053,7 @@ const thermalTable: TableDefinition = {
     {
       key: 'specificHeat',
       label: 'Specific heat',
-      unit: 'J/(kg·K)@°C',
+      unit: 'J/(kg K)@degC',
       kind: 'lookup',
     },
   ],
@@ -1070,11 +1070,11 @@ function thermalDefinition(): CalculatorDefinition {
     title: 'Thermal',
     variables: [
       { name: 'material', label: 'Material', table: 'thermal' },
-      { name: 'temperature', label: 'Temperature', unit: '°C', default: 20 },
+      { name: 'temperature', label: 'Temperature', unit: 'degC', default: 20 },
       {
         name: 'specificHeat',
         label: 'Specific heat',
-        unit: 'J/(kg·K)',
+        unit: 'J/(kg K)',
         tableSelect: 'material',
         tableField: 'specificHeat',
         tableAxis: 'temperature',
@@ -1098,9 +1098,9 @@ const densityTable: TableDefinition = {
     {
       key: 'density',
       label: 'Density',
-      unit: 'kg/m3@°C,kPa',
+      unit: 'kg/m^3@degC,kPa',
       kind: 'lookup',
-      standards: { '°C': 20, kPa: 101.325 },
+      standards: { 'degC': 20, kPa: 101.325 },
     },
   ],
   rows: [
@@ -1128,11 +1128,11 @@ function densityDefinition(table: TableDefinition): CalculatorDefinition {
     title: 'Density',
     variables: [
       { name: 'material', label: 'Material', table: table.id },
-      { name: 'temperature', label: 'Temperature', unit: '°C', default: 20 },
+      { name: 'temperature', label: 'Temperature', unit: 'degC', default: 20 },
       {
         name: 'density',
         label: 'Density',
-        unit: 'kg/m3',
+        unit: 'kg/m^3',
         tableSelect: 'material',
         tableField: 'density',
         tableAxis: 'temperature',
@@ -1153,7 +1153,7 @@ function standardDensityDefinition(
       {
         name: 'density',
         label: 'Density',
-        unit: 'kg/m3',
+        unit: 'kg/m^3',
         tableSelect: 'material',
         tableField: 'density',
       },

@@ -7,16 +7,16 @@ import { LookupDialog } from './lookup-dialog.js';
 const heatColumn: TableColumn = {
   key: 'specificHeat',
   label: 'Specific heat',
-  unit: 'J/(kg·K)@°C',
+  unit: 'J/(kg K)@degC',
   kind: 'lookup',
 };
 
 const densityColumn: TableColumn = {
   key: 'density',
   label: 'Density',
-  unit: 'kg/m3@°C,kPa',
+  unit: 'kg/m^3@degC,kPa',
   kind: 'lookup',
-  standards: { '°C': 20, kPa: 101.325 },
+  standards: { 'degC': 20, kPa: 101.325 },
 };
 
 async function mount(): Promise<LookupDialog> {
@@ -79,11 +79,11 @@ describe('LookupDialog', () => {
     const dialog = await open(heatColumn, '460@20; 600@500');
 
     expect(axisInput(dialog).value).toBe('20');
-    expect(dialog.textContent).toContain('Specific heat: 460 J/(kg·K)');
+    expect(dialog.textContent).toContain('Specific heat: 460 J/(kg K)');
 
     typeInto(axisInput(dialog), '500');
     await dialog.updateComplete;
-    expect(dialog.textContent).toContain('600 J/(kg·K)');
+    expect(dialog.textContent).toContain('600 J/(kg K)');
   });
 
   it('shows the sampled points in a table', async () => {
@@ -116,19 +116,19 @@ describe('LookupDialog', () => {
 
     expect(axisInputAt(dialog, 0).value).toBe('0');
     expect(axisInputAt(dialog, 1).value).toBe('0');
-    expect(dialog.textContent).toContain('Density: 10 kg/m3');
+    expect(dialog.textContent).toContain('Density: 10 kg/m^3');
 
     typeInto(axisInputAt(dialog, 0), '5');
     typeInto(axisInputAt(dialog, 1), '5');
     await dialog.updateComplete;
-    expect(dialog.textContent).toContain('Density: 25 kg/m3');
+    expect(dialog.textContent).toContain('Density: 25 kg/m^3');
   });
 
   it('fills an omitted coordinate from the column standard', async () => {
     const dialog = await open(densityColumn, '100@25; 200@75');
     expect(axisInputAt(dialog, 0).value).toBe('25');
     expect(axisInputAt(dialog, 1).value).toBe('101.325');
-    expect(dialog.textContent).toContain('Density: 100 kg/m3');
+    expect(dialog.textContent).toContain('Density: 100 kg/m^3');
   });
 
   it('shows the standard coordinate for a sample that omits it', async () => {
@@ -144,7 +144,7 @@ describe('LookupDialog', () => {
     expect(dialog.textContent).toContain('standard point');
     const result = dialog.querySelector('[data-testid="lookup-result"]');
     expect(result?.textContent?.replace(/\s+/g, ' ')).toContain(
-      'Specific heat: 4182 J/(kg·K)',
+      'Specific heat: 4182 J/(kg K)',
     );
   });
 });

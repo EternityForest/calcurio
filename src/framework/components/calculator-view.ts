@@ -191,7 +191,8 @@ export class CalculatorView extends LitElement {
     const output =
       runMode && runtime.isComputable(name) && !isTableSelectVariable(variable);
     const source = runtime.sourceLabel(name);
-    const base = {
+    const setterButtonLabels = variable.setterButtons?.map((b) => b.label);
+    const baseParts = {
       name,
       label: variable.label,
       description: variable.description ?? '',
@@ -205,6 +206,10 @@ export class CalculatorView extends LitElement {
       issues: runtime.issuesFor(name).map((issue) => issue.message),
       highlight: source !== null,
     };
+    const base =
+      setterButtonLabels !== undefined && setterButtonLabels.length > 0
+        ? { ...baseParts, setterButtons: setterButtonLabels as readonly string[] }
+        : baseParts;
 
     if (isTableSelectVariable(variable)) {
       const model: FieldModel = {
@@ -222,6 +227,8 @@ export class CalculatorView extends LitElement {
             this.selectRow(runtime, name, key)}
           .onFindClosest=${() => this.findClosestRow(runtime, name)}
           .onCalculate=${() => runtime.calculate(name)}
+          .onSetterButton=${(index: number) =>
+            this.handleSetterButton(runtime, name, index)}
         ></calc-variable-field>
       `;
     }
@@ -238,6 +245,8 @@ export class CalculatorView extends LitElement {
           .model=${model}
           .onCommit=${(text: string) => runtime.setDisplayText(name, text)}
           .onCalculate=${() => runtime.calculate(name)}
+          .onSetterButton=${(index: number) =>
+            this.handleSetterButton(runtime, name, index)}
         ></calc-variable-field>
       `;
     }
@@ -263,6 +272,8 @@ export class CalculatorView extends LitElement {
           runtime.setDisplayUnit(name, unit)}
         .onCalculate=${() => runtime.calculate(name)}
         .onPlot=${() => this.openGraph(name)}
+        .onSetterButton=${(index: number) =>
+          this.handleSetterButton(runtime, name, index)}
       ></calc-variable-field>
     `;
   }
@@ -289,6 +300,22 @@ export class CalculatorView extends LitElement {
       this.status = `Could not find a row: ${errorMessage(error)}`;
       this.requestUpdate();
     }
+  }
+
+  /** Handles a setter button click by invoking the setter callback. */
+  private handleSetterButton(
+    runtime: CalculatorRuntime,
+    name: string,
+    index: number,
+  ): void {
+    const variable = runtime.variable(name);
+    const buttons = variable.setterButtons;
+    if (buttons === undefined || buttons[index] === undefined) {
+      return;
+    }
+    const setter = buttons[index].setter;
+    const newValue = setter(runtime.state);
+    runtime.setFromSetter(name, newValue);
   }
 
   private renderErrors(

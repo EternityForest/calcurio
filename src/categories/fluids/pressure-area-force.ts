@@ -42,8 +42,8 @@ export const pressureAreaForce: CalculatorDefinition = {
     {
       name: 'area',
       label: 'Area',
-      unit: 'm2',
-      defaultDisplayUnit: 'cm2',
+      unit: 'm^2',
+      defaultDisplayUnit: 'cm^2',
       description: 'Area over which the pressure acts.',
       validate: (state) => {
         const area = numberOrNull(state, 'area');

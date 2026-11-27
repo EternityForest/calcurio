@@ -15,6 +15,6 @@ export const volumeConversion: CalculatorDefinition = {
   variables: equivalentUnitVariables([
     { name: 'gallons', label: 'Gallons', unit: 'gal' },
     { name: 'litres', label: 'Litres', unit: 'l' },
-    { name: 'cubicFeet', label: 'Cubic feet', unit: 'ft3' },
+    { name: 'cubicFeet', label: 'Cubic feet', unit: 'ft^3' },
   ]),
 };

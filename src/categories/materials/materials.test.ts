@@ -92,7 +92,7 @@ describe('Volume vs weight', () => {
   it('computes weight from volume and density', () => {
     const calc = new CalculatorRuntime(volumeVsWeight, registry);
     calc.setSelection('material', 'aluminum');
-    calc.setDisplayUnit('volume', 'm3');
+    calc.setDisplayUnit('volume', 'm^3');
     calc.setDisplayText('volume', '0.001');
     expect(number(calc.state['weight'])).toBeCloseTo(2.7, 9);
   });

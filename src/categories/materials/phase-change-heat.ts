@@ -52,13 +52,13 @@ export const phaseChangeHeat: CalculatorDefinition = {
     {
       name: 'startTemperature',
       label: 'Start temperature',
-      unit: '°C',
+      unit: 'degC',
       description: 'Temperature before the change.',
     },
     {
       name: 'endTemperature',
       label: 'End temperature',
-      unit: '°C',
+      unit: 'degC',
       description: 'Temperature after the change.',
     },
     {

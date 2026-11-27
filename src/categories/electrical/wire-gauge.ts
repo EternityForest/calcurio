@@ -90,7 +90,7 @@ export const wireGaugeTable: TableDefinition = {
     {
       key: 'area',
       label: 'Cross-section',
-      unit: 'mm2',
+      unit: 'mm^2',
       description: 'Nominal conductor area.',
     },
     { key: 'diameter', label: 'Diameter', unit: 'mm' },

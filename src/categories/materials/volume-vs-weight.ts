@@ -28,7 +28,7 @@ export const volumeVsWeight: CalculatorDefinition = {
     {
       name: 'density',
       label: 'Density',
-      unit: 'kg/m3',
+      unit: 'kg/m^3',
       editable: false,
       tableSelect: 'material',
       tableField: 'density',
@@ -37,7 +37,7 @@ export const volumeVsWeight: CalculatorDefinition = {
     {
       name: 'volume',
       label: 'Volume',
-      unit: 'm3',
+      unit: 'm^3',
       defaultDisplayUnit: 'l',
       description: 'Volume of the material.',
       computable: (state) => {

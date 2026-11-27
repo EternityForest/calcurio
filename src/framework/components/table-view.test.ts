@@ -34,12 +34,12 @@ function sampleTable(): TableDefinition {
     columns: [
       { key: 'id', label: 'ID', kind: 'text' },
       { key: 'name', label: 'Name', kind: 'text' },
-      { key: 'density', label: 'Density', unit: 'kg/m3', kind: 'number' },
+      { key: 'density', label: 'Density', unit: 'kg/m^3', kind: 'number' },
       { key: 'solid', label: 'Solid', kind: 'boolean' },
       {
         key: 'specificHeat',
         label: 'Specific heat',
-        unit: 'J/(kg·K)@°C',
+        unit: 'J/(kg K)@degC',
         kind: 'lookup',
       },
     ],
@@ -142,7 +142,7 @@ describe('TableView', () => {
         {
           key: 'specificHeat',
           label: 'Specific heat',
-          unit: 'J/(kg·K)@°C',
+          unit: 'J/(kg K)@degC',
           kind: 'lookup',
         },
       ],

@@ -6,6 +6,13 @@ import type {
   ConfigFieldDefinition,
   VariableDefinition,
 } from '../../framework/types.js';
+import {
+  defaultUnitForMeasure,
+  measurementKinds,
+  measureOf,
+  type MeasureName,
+  type UnitSymbol,
+} from '../../framework/units.js';
 
 /** Fewest and most operands an arithmetic calculator accepts. */
 export const MIN_SLOTS = 2;
@@ -38,6 +45,41 @@ export function slotCount(config: CalculatorConfig): number {
   return Math.min(MAX_SLOTS, Math.max(MIN_SLOTS, Math.round(raw)));
 }
 
+/** All measurement kinds suitable for add/subtract unit selection. */
+function unitOptions(): readonly string[] {
+  return [...measurementKinds(), '1'];
+}
+
+/** Config field for selecting the unit of operands and result. */
+export const unitConfig: readonly ConfigFieldDefinition[] = [
+  {
+    name: 'unit',
+    label: 'Unit',
+    kind: 'select',
+    default: '1',
+    options: unitOptions(),
+    description: 'Unit for all values and the result.',
+  },
+];
+
+/** Reads the unit from config, defaulting to dimensionless. */
+export function getUnit(config: CalculatorConfig): UnitSymbol {
+  const raw = config['unit'];
+  if (typeof raw === 'string') {
+    // Handle custom "1" string which is dimensionless
+    if (raw === '1') {
+      return '1';
+    }
+    // Check if it's a valid measure name or a direct unit
+    try {
+      return measureOf(raw as UnitSymbol) ? (raw as UnitSymbol) : defaultUnitForMeasure(raw as MeasureName);
+    } catch {
+      return '1';
+    }
+  }
+  return '1';
+}
+
 /** How one arithmetic calculator builds its operands and result. */
 export interface OperandSpec {
   readonly count: number;
@@ -46,27 +88,31 @@ export interface OperandSpec {
   readonly resultName: string;
   readonly resultLabel: string;
   readonly combine: (values: readonly number[]) => number | MissingValue;
+  /** Unit for operands and result (defaults to dimensionless). */
+  readonly unit?: UnitSymbol;
 }
 
 /**
- * Builds `count` dimensionless operand variables plus one read-only result.
+ * Builds `count` operand variables plus one read-only result.
+ * Each operand and the result use the specified unit.
  * The result reports the operands it still needs through `missing()`.
  */
 export function buildOperands(
   spec: OperandSpec,
 ): readonly VariableDefinition[] {
+  const unit = spec.unit ?? '1';
   const variables: VariableDefinition[] = [];
   for (let index = 0; index < spec.count; index += 1) {
     variables.push({
       name: slotName(index),
       label: spec.operandLabel(index, spec.count),
-      unit: '1',
+      unit,
     });
   }
   variables.push({
     name: spec.resultName,
     label: spec.resultLabel,
-    unit: '1',
+    unit,
     editable: false,
     computable: (state) => combineSlots(state, spec),
   });

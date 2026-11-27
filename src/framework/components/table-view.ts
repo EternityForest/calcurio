@@ -25,6 +25,7 @@ import type {
 import { LookupDialog } from './lookup-dialog.js';
 import { TableRowDialog } from './table-row-dialog.js';
 import type { TableRowMode } from './table-row-dialog.js';
+import { toUnicodeDisplay } from '../units.js';
 import { TableRowsDialog } from './table-rows-dialog.js';
 
 /** How long a Delete button stays armed before it forgets the first click. */
@@ -429,7 +430,7 @@ function renderUnit(column: TableColumn): TemplateResult | typeof nothing {
   if (column.unit === undefined) {
     return nothing;
   }
-  return html`<span class="calc-table-unit"> (${column.unit})</span>`;
+  return html`<span class="calc-table-unit"> (${toUnicodeDisplay(column.unit)})</span>`;
 }
 
 function renderCell(

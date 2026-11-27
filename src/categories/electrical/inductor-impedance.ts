@@ -68,7 +68,7 @@ export const inductorImpedance: CalculatorDefinition = {
     {
       name: 'impedance',
       label: 'Impedance',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Reactance at the frequency.',
       computable: (state) => {
         const frequency = valueOf(state, 'frequency');

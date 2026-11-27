@@ -16,6 +16,7 @@ import type {
   TableDefinition,
   TableRow,
 } from '../types.js';
+import { toUnicodeDisplay } from '../units.js';
 
 let nextDialogId = 0;
 
@@ -149,12 +150,13 @@ export class TableRowDialog extends LitElement {
     column: TableColumn,
   ): TemplateResult {
     const value = this.cells[column.key] ?? '';
-    const unit = column.unit === undefined ? '' : ` (${column.unit})`;
+    const unitDisplay =
+      column.unit === undefined ? '' : ` (${toUnicodeDisplay(column.unit)})`;
     const isKey = column.key === table.keyColumn;
     const testId = `row-${column.key}`;
     return html`
       <label class="calc-field">
-        <span class="calc-field-label">${column.label}${unit}</span>
+        <span class="calc-field-label">${column.label}${unitDisplay}</span>
         ${
           isBooleanColumn(column)
             ? html`

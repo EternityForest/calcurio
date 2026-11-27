@@ -14,7 +14,7 @@ export const speedConversion: CalculatorDefinition = {
     'and metres per second. Enter any one value and the others follow.',
   variables: equivalentUnitVariables([
     { name: 'kilometresPerHour', label: 'Kilometres per hour', unit: 'km/h' },
-    { name: 'milesPerHour', label: 'Miles per hour', unit: 'mph' },
+    { name: 'milesPerHour', label: 'Miles per hour', unit: 'mi/h' },
     { name: 'feetPerSecond', label: 'Feet per second', unit: 'ft/s' },
     { name: 'metresPerSecond', label: 'Metres per second', unit: 'm/s' },
   ]),

@@ -20,19 +20,19 @@ export const resistorParallel: CalculatorDefinition = {
     {
       name: 'r1',
       label: 'R1',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Resistance of the first resistor.',
     },
     {
       name: 'r2',
       label: 'R2',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Resistance of the second resistor.',
     },
     {
       name: 'rtotal',
       label: 'R total',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Equivalent parallel resistance.',
       computable: (state) => {
         const r1 = valueOf(state, 'r1');

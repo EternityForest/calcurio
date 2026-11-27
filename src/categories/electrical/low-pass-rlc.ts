@@ -75,7 +75,7 @@ export const lowPassRlc: CalculatorDefinition = {
     {
       name: 'resistance',
       label: 'Resistance',
-      unit: 'Ω',
+      unit: 'ohm',
       default: 1000,
       description: 'Series resistance. Set to 0 to omit it.',
       validate: (state) => {
@@ -103,7 +103,7 @@ export const lowPassRlc: CalculatorDefinition = {
       label: 'Capacitance',
       unit: 'F',
       default: 1e-6,
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
       description: 'Shunt capacitance.',
       validate: (state) => {
         const value = valueOf(state, 'capacitance');

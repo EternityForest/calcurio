@@ -65,7 +65,7 @@ export const pipePressureDrop: CalculatorDefinition = {
     {
       name: 'density',
       label: 'Density',
-      unit: 'kg/m3',
+      unit: 'kg/m^3',
       editable: false,
       tableSelect: 'fluid',
       tableField: 'density',
@@ -74,7 +74,7 @@ export const pipePressureDrop: CalculatorDefinition = {
     {
       name: 'viscosity',
       label: 'Viscosity',
-      unit: 'Pa·s',
+      unit: 'Pa s',
       editable: false,
       tableSelect: 'fluid',
       tableField: 'viscosity',
@@ -122,7 +122,7 @@ export const pipePressureDrop: CalculatorDefinition = {
     {
       name: 'flowRate',
       label: 'Flow rate',
-      unit: 'm3/s',
+      unit: 'm^3/s',
       defaultDisplayUnit: 'l/min',
       description: 'Volumetric flow through the pipe.',
       validate: (state) => {

@@ -42,7 +42,7 @@ describe('Pipe pressure drop', () => {
     calc.setDisplayText('diameter', '50');
     calc.setDisplayText('length', '100');
     calc.setDisplayText('roughness', '0.045');
-    calc.setDisplayUnit('flowRate', 'm3/s');
+    calc.setDisplayUnit('flowRate', 'm^3/s');
     calc.setDisplayText('flowRate', '0.003926990816987242');
     expect(number(calc.state['velocity'])).toBeCloseTo(2, 9);
     expect(number(calc.state['reynoldsNumber'])).toBeCloseTo(
@@ -63,7 +63,7 @@ describe('Pipe pressure drop', () => {
     calc.setDisplayText('diameter', '25');
     calc.setDisplayText('length', '10');
     calc.setDisplayText('roughness', '0.0015');
-    calc.setDisplayUnit('flowRate', 'm3/s');
+    calc.setDisplayUnit('flowRate', 'm^3/s');
     calc.setDisplayText('flowRate', '0.00005');
     const reynolds = number(calc.state['reynoldsNumber']);
     expect(reynolds).toBeLessThan(2300);

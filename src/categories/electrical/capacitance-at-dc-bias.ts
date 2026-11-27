@@ -29,7 +29,7 @@ export const capacitanceAtDcBias: CalculatorDefinition = {
       name: 'capacitance',
       label: 'Rated capacitance',
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
       description: 'Capacitance at zero bias, as the part is rated.',
       validate: (state) => {
         const capacitance = valueOf(state, 'capacitance');
@@ -68,7 +68,7 @@ export const capacitanceAtDcBias: CalculatorDefinition = {
       name: 'biasedCapacitance',
       label: 'Capacitance at this voltage',
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
       editable: false,
       description: 'Capacitance the model gives at the DC bias voltage.',
       computable: (state) => {

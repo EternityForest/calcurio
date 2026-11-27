@@ -30,7 +30,7 @@ export const waveMediaTable: TableDefinition = {
     {
       key: 'impedance',
       label: 'Impedance',
-      unit: 'Ω',
+      unit: 'ohm',
       description:
         'Wave impedance for a bulk medium, or characteristic impedance for ' +
         'a cable.',

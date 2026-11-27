@@ -17,15 +17,15 @@ describe('convertUnit', () => {
   });
 
   it('converts between resistance units', () => {
-    expect(convertUnit(1, 'kΩ', 'Ω')).toBeCloseTo(1000, 12);
-    expect(convertUnit(1, 'MΩ', 'kΩ')).toBeCloseTo(1000, 12);
-    expect(convertUnit(1, 'mΩ', 'Ω')).toBeCloseTo(0.001, 12);
+    expect(convertUnit(1, 'kohm', 'ohm')).toBeCloseTo(1000, 12);
+    expect(convertUnit(1, 'Mohm', 'kohm')).toBeCloseTo(1000, 12);
+    expect(convertUnit(1, 'mohm', 'ohm')).toBeCloseTo(0.001, 12);
   });
 
   it('converts between temperature units', () => {
-    expect(convertUnit(25, '°C', 'K')).toBeCloseTo(298.15, 12);
-    expect(convertUnit(100, '°C', '°F')).toBeCloseTo(212, 12);
-    expect(convertUnit(-40, '°C', '°F')).toBeCloseTo(-40, 12);
+    expect(convertUnit(25, 'degC', 'K')).toBeCloseTo(298.15, 12);
+    expect(convertUnit(100, 'degC', 'degF')).toBeCloseTo(212, 12);
+    expect(convertUnit(-40, 'degC', 'degF')).toBeCloseTo(-40, 12);
   });
 
   it('converts between specific energy units', () => {
@@ -37,31 +37,31 @@ describe('convertUnit', () => {
 
 describe('composite units', () => {
   it('splits a value unit and its axis units', () => {
-    expect(parseCompositeUnit('J/(kg·K)@°C')).toEqual({
-      unit: 'J/(kg·K)',
-      axes: ['°C'],
+    expect(parseCompositeUnit('J/(kg K)@degC')).toEqual({
+      unit: 'J/(kg K)',
+      axes: ['degC'],
     });
-    expect(parseCompositeUnit('kg/m3@°C')).toEqual({
-      unit: 'kg/m3',
-      axes: ['°C'],
+    expect(parseCompositeUnit('kg/m^3@degC')).toEqual({
+      unit: 'kg/m^3',
+      axes: ['degC'],
     });
-    expect(parseCompositeUnit('kg/m3@°C,kPa')).toEqual({
-      unit: 'kg/m3',
-      axes: ['°C', 'kPa'],
+    expect(parseCompositeUnit('kg/m^3@degC,kPa')).toEqual({
+      unit: 'kg/m^3',
+      axes: ['degC', 'kPa'],
     });
   });
 
   it('rejects malformed composite units', () => {
-    expect(parseCompositeUnit('kg/m3')).toBeNull();
-    expect(parseCompositeUnit('kg/m3@')).toBeNull();
-    expect(parseCompositeUnit('@°C')).toBeNull();
-    expect(parseCompositeUnit('kg/m3@not-a-unit')).toBeNull();
-    expect(parseCompositeUnit('kg/m3@°C,not-a-unit')).toBeNull();
+    expect(parseCompositeUnit('kg/m^3')).toBeNull();
+    expect(parseCompositeUnit('kg/m^3@')).toBeNull();
+    expect(parseCompositeUnit('@degC')).toBeNull();
+    expect(parseCompositeUnit('kg/m^3@not-a-unit')).toBeNull();
+    expect(parseCompositeUnit('kg/m^3@degC,not-a-unit')).toBeNull();
   });
 
   it('joins a value unit and one or more axis units', () => {
-    expect(compositeUnit('kg/m3', '°C')).toBe('kg/m3@°C');
-    expect(compositeUnit('kg/m3', '°C', 'kPa')).toBe('kg/m3@°C,kPa');
+    expect(compositeUnit('kg/m^3', 'degC')).toBe('kg/m^3@degC');
+    expect(compositeUnit('kg/m^3', 'degC', 'kPa')).toBe('kg/m^3@degC,kPa');
   });
 });
 
@@ -74,10 +74,10 @@ describe('unitsOfKind', () => {
   });
 
   it('lists the custom resistance units', () => {
-    const units = unitsOfKind('Ω');
-    expect(units).toContain('mΩ');
-    expect(units).toContain('kΩ');
-    expect(units).toContain('MΩ');
+    const units = unitsOfKind('ohm');
+    expect(units).toContain('mohm');
+    expect(units).toContain('kohm');
+    expect(units).toContain('Mohm');
   });
 });
 
@@ -85,7 +85,7 @@ describe('measureOf', () => {
   it('reports the measurement kind', () => {
     expect(measureOf('mV')).toBe('voltage');
     expect(measureOf('mA')).toBe('current');
-    expect(measureOf('Ω')).toBe('resistance');
+    expect(measureOf('ohm')).toBe('resistance');
   });
 });
 
@@ -122,6 +122,6 @@ describe('choicesForUnit', () => {
   });
 
   it('keeps the base unit even when options omit it', () => {
-    expect(choicesForUnit('Ω', ['kΩ', 'MΩ'])).toEqual(['Ω', 'kΩ', 'MΩ']);
+    expect(choicesForUnit('ohm', ['kohm', 'Mohm'])).toEqual(['ohm', 'kohm', 'Mohm']);
   });
 });

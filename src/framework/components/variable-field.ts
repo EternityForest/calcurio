@@ -1,7 +1,7 @@
 import { html, LitElement, nothing } from 'lit';
 import type { TemplateResult } from 'lit';
 import type { ValueUpdateResult } from '../runtime.js';
-import type { UnitSymbol } from '../units.js';
+import { toUnicodeDisplay, type UnitSymbol } from '../units.js';
 
 const COMMIT_DELAY_MS = 100;
 
@@ -23,6 +23,8 @@ interface FieldBase {
   readonly issues: readonly string[];
   /** Whether the field is emphasised (its value arrives over a wire). */
   readonly highlight?: boolean;
+  /** Buttons that instantly set this variable to a computed value. */
+  readonly setterButtons?: readonly string[];
 }
 
 /** A numeric value with a unit selector. */
@@ -80,6 +82,7 @@ export class VariableField extends LitElement {
   onFindClosest: () => void = () => {};
   onCalculate: () => void = () => {};
   onPlot: () => void = () => {};
+  onSetterButton: (index: number) => void = () => {};
 
   private localError = '';
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -202,12 +205,12 @@ export class VariableField extends LitElement {
           ${model.unitChoices.map(
             (unit) => html`
               <option value=${unit} ?selected=${unit === model.unit}>
-                ${unit}
+                ${toUnicodeDisplay(unit)}
               </option>
             `,
           )}
         </select>
-        ${this.renderCalculateButton(model)} ${this.renderPlotButton(model)}
+        ${this.renderSetterButtons(model)} ${this.renderCalculateButton(model)} ${this.renderPlotButton(model)}
       </div>
     `;
   }
@@ -228,7 +231,7 @@ export class VariableField extends LitElement {
           @change=${this.handleChange}
           @keydown=${this.handleKeydown}
         />
-        ${this.renderCalculateButton(model)}
+        ${this.renderSetterButtons(model)} ${this.renderCalculateButton(model)}
       </div>
     `;
   }
@@ -257,7 +260,7 @@ export class VariableField extends LitElement {
             `,
           )}
         </select>
-        ${this.renderCalculateButton(model)}
+        ${this.renderSetterButtons(model)} ${this.renderCalculateButton(model)}
         ${this.renderFindClosestButton(model)}
       </div>
     `;
@@ -317,6 +320,30 @@ export class VariableField extends LitElement {
       >
         Plot
       </button>
+    `;
+  }
+
+  private renderSetterButtons(
+    model: FieldModel,
+  ): TemplateResult | typeof nothing {
+    const buttons = model.setterButtons;
+    if (buttons === undefined || buttons.length === 0) {
+      return nothing;
+    }
+    return html`
+      ${buttons.map(
+        (label, index) => html`
+          <button
+            class="button calc-setter"
+            type="button"
+            title=${`Set ${model.label} to ${label}`}
+            data-testid=${`setter-${model.name}-${index}`}
+            @click=${() => this.handleSetterButton(index)}
+          >
+            ${label}
+          </button>
+        `,
+      )}
     `;
   }
 
@@ -405,6 +432,10 @@ export class VariableField extends LitElement {
     if (this.commitNow()) {
       this.onPlot();
     }
+  };
+
+  private readonly handleSetterButton = (index: number): void => {
+    this.onSetterButton(index);
   };
 
   private commitNow(): boolean {

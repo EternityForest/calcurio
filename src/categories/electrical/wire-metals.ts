@@ -19,7 +19,7 @@ export const wireMetalsTable: TableDefinition = {
     {
       key: 'resistivity',
       label: 'Resistivity',
-      unit: 'Ω·mm²/m',
+      unit: 'ohm mm^2/m',
       description: 'Resistance of a 1 m length with 1 mm² cross-section.',
     },
   ],

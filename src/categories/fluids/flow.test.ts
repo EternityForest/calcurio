@@ -55,7 +55,7 @@ describe('Pipe flow', () => {
 
   it('solves the velocity from diameter and flow rate', () => {
     const calc = new CalculatorRuntime(pipeFlow);
-    calc.setDisplayUnit('flowRate', 'm3/s');
+    calc.setDisplayUnit('flowRate', 'm^3/s');
     calc.setDisplayText('diameter', '50');
     calc.setDisplayText('flowRate', '0.003926990816987242');
     calc.calculate('velocity');
@@ -64,7 +64,7 @@ describe('Pipe flow', () => {
 
   it('solves the diameter from flow rate and velocity', () => {
     const calc = new CalculatorRuntime(pipeFlow);
-    calc.setDisplayUnit('flowRate', 'm3/s');
+    calc.setDisplayUnit('flowRate', 'm^3/s');
     calc.setDisplayText('flowRate', '0.003926990816987242');
     calc.setDisplayText('velocity', '2');
     calc.calculate('diameter');
@@ -80,7 +80,7 @@ describe('Pressure, area, and force', () => {
   it('computes force from pressure and area', () => {
     const calc = new CalculatorRuntime(pressureAreaForce);
     calc.setDisplayUnit('pressure', 'Pa');
-    calc.setDisplayUnit('area', 'm2');
+    calc.setDisplayUnit('area', 'm^2');
     calc.setDisplayText('pressure', '100');
     calc.setDisplayText('area', '0.01');
     expect(number(calc.state['force'])).toBeCloseTo(1, 9);
@@ -89,7 +89,7 @@ describe('Pressure, area, and force', () => {
   it('solves pressure from force and area', () => {
     const calc = new CalculatorRuntime(pressureAreaForce);
     calc.setDisplayUnit('pressure', 'Pa');
-    calc.setDisplayUnit('area', 'm2');
+    calc.setDisplayUnit('area', 'm^2');
     calc.setDisplayText('force', '1000');
     calc.setDisplayText('area', '0.01');
     calc.calculate('pressure');

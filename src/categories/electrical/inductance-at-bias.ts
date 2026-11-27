@@ -62,7 +62,7 @@ export const inductanceAtBias: CalculatorDefinition = {
     {
       name: 'temperature',
       label: 'Temperature',
-      unit: '°C',
+      unit: 'degC',
       default: 25,
       description:
         'Operating temperature. The saturation current is derated linearly ' +

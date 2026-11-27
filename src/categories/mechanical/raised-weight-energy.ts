@@ -42,7 +42,7 @@ export const raisedWeightEnergy: CalculatorDefinition = {
     {
       name: 'gravity',
       label: 'Gravity',
-      unit: 'm/s2',
+      unit: 'm/s^2',
       default: STANDARD_GRAVITY,
       description: 'Acceleration due to gravity.',
       validate: (state) => {

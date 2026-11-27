@@ -29,7 +29,7 @@ export const voltageDivider: CalculatorDefinition = {
     {
       name: 'r1',
       label: 'R1',
-      unit: 'Ω',
+      unit: 'ohm',
       tableSelect: 'r1Select',
       tableField: 'value',
       description: 'Resistance from the input to the output node.',
@@ -44,7 +44,7 @@ export const voltageDivider: CalculatorDefinition = {
     {
       name: 'r2',
       label: 'R2',
-      unit: 'Ω',
+      unit: 'ohm',
       tableSelect: 'r2Select',
       tableField: 'value',
       description: 'Resistance from the output node to ground.',

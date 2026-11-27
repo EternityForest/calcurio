@@ -47,7 +47,7 @@ export const capacitorTypesTable: TableDefinition = {
     {
       key: 'volume',
       label: 'Active volume',
-      unit: 'mm3',
+      unit: 'mm^3',
       description: 'Volume of active dielectric, or null when not applicable.',
     },
     {

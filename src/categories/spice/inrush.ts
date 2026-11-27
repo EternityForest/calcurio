@@ -201,7 +201,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'seriesInductance',
       label: 'Series inductance',
       unit: 'H',
-      defaultDisplayUnit: 'µH',
+      defaultDisplayUnit: 'uH',
       default: 2e-6,
       description:
         'Inductance between the supply and the capacitors, at zero current.',
@@ -234,8 +234,8 @@ export const inrushTransient: CalculatorDefinition = {
     {
       name: 'seriesResistance',
       label: 'Series resistance',
-      unit: 'Ω',
-      defaultDisplayUnit: "mΩ",
+      unit: 'ohm',
+      defaultDisplayUnit: "mohm",
       default: 0.010,
       description: 'Resistance in series with the inductance.',
       validate: aboveZero(
@@ -247,7 +247,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitance1',
       label: 'Capacitance 1',
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
       default: 10e-6,
       description: 'Capacitor directly across the load, at zero bias.',
       validate: aboveZero(
@@ -278,7 +278,7 @@ export const inrushTransient: CalculatorDefinition = {
     {
       name: 'dampingResistance',
       label: 'Damping resistance',
-      unit: 'Ω',
+      unit: 'ohm',
       default: 5,
       description: 'Resistance in series with the second capacitor.',
       validate: aboveZero(
@@ -290,7 +290,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'capacitance2',
       label: 'Capacitance 2',
       unit: 'F',
-      defaultDisplayUnit: 'µF',
+      defaultDisplayUnit: 'uF',
       default: 10e-6,
       description: 'Capacitor behind the damping resistance, at zero bias.',
       validate: aboveZero(
@@ -320,7 +320,7 @@ export const inrushTransient: CalculatorDefinition = {
     {
       name: 'temperature',
       label: 'Temperature',
-      unit: '°C',
+      unit: 'degC',
       default: 25,
       description:
         'Operating temperature. The saturation current is derated linearly ' +
@@ -330,7 +330,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'step',
       label: 'Time step',
       unit: 'ns',
-      unitOptions: ['ns', 'mu', 'ms', 's'],
+      unitOptions: ['ns', 'us', 'ms', 's'],
       default: 100,
       description: 'Spacing ngspice uses for the stored samples.',
       validate: checkTiming,
@@ -339,7 +339,7 @@ export const inrushTransient: CalculatorDefinition = {
       name: 'length',
       label: 'Simulation length',
       unit: 'ms',
-      unitOptions: ['ns', 'mu', 'ms', 's'],
+      unitOptions: ['ns', 'us', 'ms', 's'],
       default: 100,
       description: 'How much time the simulation covers.',
     },

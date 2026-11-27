@@ -49,6 +49,7 @@ import { isUnchanged } from './unchanged.js';
 import {
   choicesForUnit,
   convertUnit,
+  isDimensionless,
   isUnitSymbol,
   measureOf,
   parseCompositeUnit,
@@ -670,6 +671,22 @@ export class CalculatorRuntime {
     }
     this.displayUnits.set(name, unit);
     this.emit();
+  }
+
+  /**
+   * Sets a variable to a computed value from a setter button. The value is
+   * pinned and other values are recomputed. Unlike setDisplayText, the value
+   * is used directly without unit conversion.
+   */
+  setFromSetter(name: string, value: CalcValue): void {
+    const variable = this.requireVariable(name);
+    if (isTableSelectVariable(variable)) {
+      throw new Error(`${variable.label} cannot be set this way.`);
+    }
+    if (!this.isEditable(name)) {
+      throw new Error(`${variable.label} is read-only.`);
+    }
+    this.setValue(name, value);
   }
 
   /**
@@ -2350,6 +2367,7 @@ function configEquals(
  * Converts a source value for transport over a wire. Numbers are converted
  * from the source's base unit into the destination's; text and table keys are
  * copied unchanged (two wired selects are required to share a table).
+ * Dimensionless unit "1" passes through raw values without conversion.
  */
 function wireValue(
   source: VariableDefinition,
@@ -2361,6 +2379,10 @@ function wireValue(
     isNumberVariable(source) &&
     isNumberVariable(target)
   ) {
+    // Skip conversion for dimensionless "1" unit - passes raw value through
+    if (isDimensionless(source.unit) || isDimensionless(target.unit)) {
+      return raw;
+    }
     return convertUnit(raw, source.unit, target.unit);
   }
   return raw;

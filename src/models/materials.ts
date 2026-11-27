@@ -58,9 +58,9 @@ export const materialsTable: TableDefinition = {
     {
       key: 'density',
       label: 'Density',
-      unit: 'kg/m3@°C,kPa',
+      unit: 'kg/m^3@degC,kPa',
       kind: 'lookup',
-      standards: { '°C': 20, kPa: 101.325 },
+      standards: { degC: 20, kPa: 101.325 },
       description:
         'Density sampled against temperature and pressure, written as ' +
         '"value@temperature,pressure" pairs. Plain numbers are the value at ' +
@@ -69,9 +69,9 @@ export const materialsTable: TableDefinition = {
     {
       key: 'specificHeat',
       label: 'Specific heat',
-      unit: 'J/(kg·K)@°C',
+      unit: 'J/(kg K)@degC',
       kind: 'lookup',
-      standards: { '°C': 20 },
+      standards: { degC: 20 },
       description:
         'Specific heat capacity sampled against temperature, written as ' +
         '"value@temperature" pairs.',
@@ -79,7 +79,7 @@ export const materialsTable: TableDefinition = {
     {
       key: 'thermalConductivity',
       label: 'Thermal conductivity',
-      unit: 'W/(m·K)',
+      unit: 'W/(m K)',
       description: 'Thermal conductivity at 20 °C.',
     },
     {
@@ -91,25 +91,25 @@ export const materialsTable: TableDefinition = {
     {
       key: 'viscosity',
       label: 'Viscosity',
-      unit: 'Pa·s',
+      unit: 'Pa s',
       description: 'Dynamic viscosity at 20 °C. Empty for solids.',
     },
     {
       key: 'meltingPoint',
       label: 'Melting point',
-      unit: '°C',
+      unit: 'degC',
       description: 'Melting point. Empty when the material does not melt.',
     },
     {
       key: 'freezingPoint',
       label: 'Freezing point',
-      unit: '°C',
+      unit: 'degC',
       description: 'Freezing point. Empty when the material does not freeze.',
     },
     {
       key: 'boilingPoint',
       label: 'Boiling point',
-      unit: '°C',
+      unit: 'degC',
       description: 'Boiling point. Empty when the material does not boil.',
     },
     {

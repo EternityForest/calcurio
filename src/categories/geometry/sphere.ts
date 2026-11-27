@@ -117,8 +117,8 @@ export const sphere: CalculatorDefinition = {
     {
       name: 'surfaceArea',
       label: 'Surface area',
-      unit: 'm2',
-      defaultDisplayUnit: 'm2',
+      unit: 'm^2',
+      defaultDisplayUnit: 'm^2',
       description: 'Total area of the sphere’s surface.',
       validate: (state) => {
         const surfaceArea = numberOrNull(state, 'surfaceArea');
@@ -164,8 +164,8 @@ export const sphere: CalculatorDefinition = {
     {
       name: 'crossSectionArea',
       label: 'Cross-sectional area',
-      unit: 'm2',
-      defaultDisplayUnit: 'm2',
+      unit: 'm^2',
+      defaultDisplayUnit: 'm^2',
       description: 'Area of a great circle through the centre.',
       validate: (state) => {
         const area = numberOrNull(state, 'crossSectionArea');
@@ -211,8 +211,8 @@ export const sphere: CalculatorDefinition = {
     {
       name: 'volume',
       label: 'Volume',
-      unit: 'm3',
-      defaultDisplayUnit: 'm3',
+      unit: 'm^3',
+      defaultDisplayUnit: 'm^3',
       description: 'Space enclosed by the sphere.',
       validate: (state) => {
         const volume = numberOrNull(state, 'volume');

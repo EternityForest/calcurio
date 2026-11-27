@@ -57,7 +57,7 @@ export const ohmsLaw: CalculatorDefinition = {
     {
       name: 'resistance',
       label: 'Resistance',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Opposition to current flow.',
       computable: (state) => {
         const voltage = valueOf(state, 'voltage');

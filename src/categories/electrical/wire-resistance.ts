@@ -102,7 +102,7 @@ export const wireResistance: CalculatorDefinition = {
     {
       name: 'area',
       label: 'Cross-section',
-      unit: 'mm2',
+      unit: 'mm^2',
       tableSelect: 'gauge',
       tableField: 'area',
       description: 'Conductor cross-sectional area.',
@@ -144,7 +144,7 @@ export const wireResistance: CalculatorDefinition = {
     {
       name: 'resistivity',
       label: 'Resistivity',
-      unit: 'Ω·mm²/m',
+      unit: 'ohm mm^2/m',
       tableSelect: 'metal',
       tableField: 'resistivity',
       description: 'Resistivity at 20 °C.',
@@ -164,7 +164,7 @@ export const wireResistance: CalculatorDefinition = {
     {
       name: 'resistance',
       label: 'Resistance (one-way)',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Resistance of a single conductor of this length.',
       computable: (state) => {
         const inputs = readWireInputs(state);
@@ -186,7 +186,7 @@ export const wireResistance: CalculatorDefinition = {
     {
       name: 'roundTripResistance',
       label: 'Resistance (round trip)',
-      unit: 'Ω',
+      unit: 'ohm',
       description: 'Resistance out and back through the same conductor.',
       computable: (state) => {
         const inputs = readWireInputs(state);

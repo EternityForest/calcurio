@@ -13,8 +13,8 @@ export const temperatureConversion: CalculatorDefinition = {
     'Convert between degrees Celsius, degrees Fahrenheit, and kelvin. Enter ' +
     'any one value and the others follow.',
   variables: equivalentUnitVariables([
-    { name: 'celsius', label: 'Degrees Celsius', unit: '°C' },
-    { name: 'fahrenheit', label: 'Degrees Fahrenheit', unit: '°F' },
+    { name: 'celsius', label: 'Degrees Celsius', unit: 'degC' },
+    { name: 'fahrenheit', label: 'Degrees Fahrenheit', unit: 'degF' },
     { name: 'kelvin', label: 'Kelvin', unit: 'K' },
   ]),
 };

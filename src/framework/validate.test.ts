@@ -170,7 +170,7 @@ describe('validateCalculatorDefinition', () => {
           {
             ...definition.variables[0]!,
             unit: 'F',
-            defaultDisplayUnit: 'µF',
+            defaultDisplayUnit: 'uF',
           },
           definition.variables[1]!,
         ],
@@ -362,7 +362,7 @@ describe('validateCalculatorDefinition equivalent', () => {
         {
           name: 'area',
           label: 'Area',
-          unit: 'mm2',
+          unit: 'mm^2',
           equivalent: {
             diameter: (area) => 2 * Math.sqrt(area / Math.PI),
           },

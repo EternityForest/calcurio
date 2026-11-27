@@ -16,7 +16,7 @@ import {
   tableAxisNames,
 } from './types.js';
 import { isUnchanged } from './unchanged.js';
-import { measureOf, tryDescribeUnit } from './units.js';
+import { isDimensionless, measureOf, tryDescribeUnit } from './units.js';
 import type { UnitSymbol } from './units.js';
 
 const IDENTIFIER_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -319,11 +319,14 @@ function validateWireMatch(
   if (kind === 'number') {
     const unit = (variable as NumberVariableDefinition).unit;
     const otherUnit = (other as NumberVariableDefinition).unit;
-    if (measureOf(unit) !== measureOf(otherUnit)) {
-      problems.push(
-        `${where}: ${link} must measure the same kind ` +
-          `("${unit}" vs "${otherUnit}").`,
-      );
+    // Dimensionless unit "1" is compatible with any measure
+    if (!isDimensionless(unit) && !isDimensionless(otherUnit)) {
+      if (measureOf(unit) !== measureOf(otherUnit)) {
+        problems.push(
+          `${where}: ${link} must measure the same kind ` +
+            `("${unit}" vs "${otherUnit}").`,
+        );
+      }
     }
   }
 }

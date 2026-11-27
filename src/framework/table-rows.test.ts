@@ -37,12 +37,12 @@ function sampleTable(): TableDefinition {
     columns: [
       { key: 'id', label: 'ID', kind: 'text' },
       { key: 'name', label: 'Name', kind: 'text' },
-      { key: 'density', label: 'Density', unit: 'kg/m3', kind: 'number' },
+      { key: 'density', label: 'Density', unit: 'kg/m^3', kind: 'number' },
       { key: 'solid', label: 'Solid', kind: 'boolean' },
       {
         key: 'specificHeat',
         label: 'Specific heat',
-        unit: 'J/(kg·K)@°C',
+        unit: 'J/(kg K)@degC',
         kind: 'lookup',
       },
     ],
@@ -217,7 +217,7 @@ describe('exportTableRowsMarkdown', () => {
     const markdown = exportTableRowsMarkdown(sampleTable(), [customRow()]);
     expect(markdown).toBe(
       [
-        '| ID | Name | Density (kg/m3) | Solid | Specific heat (J/(kg·K)@°C) |',
+        '| ID | Name | Density (kg/m^3) | Solid | Specific heat (J/(kg K)@degC) |',
         '| --- | --- | --- | --- | --- |',
         '| brass | Brass | 8500 | yes | 380@20; 400@200 |',
         '',

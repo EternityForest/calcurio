@@ -84,8 +84,8 @@ export const circles: CalculatorDefinition = {
     {
       name: 'area',
       label: 'Area',
-      unit: 'm2',
-      defaultDisplayUnit: 'm2',
+      unit: 'm^2',
+      defaultDisplayUnit: 'm^2',
       description: 'Enclosed area.',
       validate: (state) => {
         const area = numberOrNull(state, 'area');

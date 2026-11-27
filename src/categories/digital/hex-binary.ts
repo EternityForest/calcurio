@@ -19,10 +19,16 @@ export const hexBinary: CalculatorDefinition = {
       pattern: '^[01]+$',
       equivalent: {
         hex: (value: string) => {
+          if (!value.startsWith('0b')) {
+            value = '0b' + value;
+          }
           return '0x' + Number(value).toString(16);
         },
         decimal: (value: string) => {
-          return Number(value)
+          if (!value.startsWith('0b')) {
+            value = '0b' + value;
+          }
+          return Number(value);
         },
       },
     },
@@ -33,10 +39,16 @@ export const hexBinary: CalculatorDefinition = {
       pattern: '^0x[0-9a-fA-F]+$',
       equivalent: {
         binary: (value: string) => {
+          if (!value.startsWith('0x')) {
+            value = '0x' + value;
+          }
           return '0b' + parseInt(value).toString(2);
         },
         decimal: (value: string) => {
-          return parseInt(value)
+          if (!value.startsWith('0x')) {
+            value = '0x' + value;
+          }
+          return parseInt(value);
         },
       },
     },
@@ -44,7 +56,7 @@ export const hexBinary: CalculatorDefinition = {
       name: 'decimal',
       label: 'Decimal',
       description: 'Decimal integer representation',
-      unit:"1",
+      unit: '1',
       equivalent: {
         hex: (value: string) => {
           return '0x' + parseInt(value).toString(16);

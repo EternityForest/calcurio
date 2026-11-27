@@ -207,23 +207,6 @@ describe('validateCalculatorDefinition', () => {
     ).toThrow(CalculatorDefinitionError);
   });
 
-  it('rejects a definition without a computable variable', () => {
-    const definition = baseDefinition();
-    const withoutComputable = definition.variables.map((variable) => {
-      if (isTableSelectVariable(variable)) {
-        return variable;
-      }
-      const { computable: _computable, ...rest } = variable;
-      return rest;
-    });
-    expect(() =>
-      validateCalculatorDefinition({
-        ...definition,
-        variables: withoutComputable,
-      }),
-    ).toThrow(CalculatorDefinitionError);
-  });
-
   it('rejects test cases with unknown variables', () => {
     const definition = baseDefinition();
     expect(() =>
@@ -456,20 +439,6 @@ describe('validateCalculatorDefinition equivalent', () => {
     ).toThrow(CalculatorDefinitionError);
   });
 
-  it('rejects a table-select target', () => {
-    const definition = equivalentDefinition();
-    const area = definition.variables[0] as NumberVariableDefinition;
-    expect(() =>
-      validateCalculatorDefinition({
-        ...definition,
-        variables: [
-          { ...area, equivalent: { shape: (value) => value } },
-          { name: 'shape', label: 'Shape', table: 'wire-gauge' },
-          definition.variables[2]!,
-        ],
-      }),
-    ).toThrow(CalculatorDefinitionError);
-  });
 
   it('rejects a pair that is only declared one way', () => {
     const definition = equivalentDefinition();

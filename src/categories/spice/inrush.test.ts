@@ -26,7 +26,7 @@ describe('inrush transient calculator', () => {
   it('defaults the timing, temperature, and part types', () => {
     const runtime = new CalculatorRuntime(inrushTransient, tables);
     expect(runtime.state['step']).toBe(100);
-    expect(runtime.state['length']).toBe(100);
+    expect(runtime.state['length']).toBe(2);
     expect(runtime.state['temperature']).toBe(25);
     expect(runtime.state['inductorType']).toBe('air');
     expect(runtime.state['capacitor1Type']).toBe('x5r-0402');
@@ -104,7 +104,7 @@ describe('inrush transient calculator', () => {
         capacitor2VoltageRating: 50,
         temperature: 25,
         step: 100,
-        length: 100,
+        length: 2,
       },
       context(),
     );

@@ -1417,7 +1417,7 @@ export class CalculatorRuntime {
         if (!this.shouldAutoUpdate(targetName)) {
           continue;
         }
-        let next: number;
+        let next: number|string;
         try {
           next = convert(value);
         } catch (error) {
@@ -1427,9 +1427,7 @@ export class CalculatorRuntime {
           );
           continue;
         }
-        if (!Number.isFinite(next)) {
-          continue;
-        }
+
         const current = this.values[targetName] ?? null;
         if (typeof current === 'number' && nearlyEqual(current, next)) {
           continue;
@@ -2237,7 +2235,7 @@ function buildEquivalentGroups(
     neighbours.set(from, links);
   };
   for (const variable of variables) {
-    if (!isNumberVariable(variable)) {
+    if (!(isNumberVariable(variable) || isTextVariable(variable))) {
       continue;
     }
     for (const target of Object.keys(variable.equivalent ?? {})) {

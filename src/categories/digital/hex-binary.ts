@@ -22,7 +22,7 @@ export const hexBinary: CalculatorDefinition = {
           return '0x' + parseInt(value).toString(16);
         },
         decimal: (value: string) => {
-          return parseInt(value).toString();
+          return parseInt(value)
         },
       },
     },
@@ -35,13 +35,16 @@ export const hexBinary: CalculatorDefinition = {
         binary: (value: string) => {
           return '0b' + parseInt(value).toString(2);
         },
+        decimal: (value: string) => {
+          return parseInt(value)
+        },
       },
     },
     {
       name: 'decimal',
       label: 'Decimal',
       description: 'Decimal integer representation',
-      pattern: '^\\d+$',
+      unit:"1",
       equivalent: {
         hex: (value: string) => {
           return '0x' + parseInt(value).toString(16);

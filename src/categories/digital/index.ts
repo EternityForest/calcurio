@@ -1,8 +1,7 @@
 import type { CalculatorDefinition, TableSource } from '../../framework/types.js';
 import { hexBinary } from './hex-binary.js';
-import { ieeeFloat } from './ieee-float.js';
 import { unixTime } from './unix-time.js';
 
 export const tables: readonly TableSource[] = [];
 
-export const calculators: readonly CalculatorDefinition[] = [hexBinary, ieeeFloat, unixTime];
+export const calculators: readonly CalculatorDefinition[] = [hexBinary, unixTime];

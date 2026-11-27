@@ -153,22 +153,21 @@ function variableProblems(variables: readonly VariableDefinition[]): string[] {
     if (isTableSelectVariable(variable)) {
       solvableCount += 1;
       validateTableSelect(where, variable, problems);
-    } else if (isTextVariable(variable)) {
-      if (variable.computable !== undefined) {
-        solvableCount += 1;
-      }
-      validateTextVariable(where, variable, problems);
     } else {
-      if (isTableFieldVariable(variable)) {
-        solvableCount += 1;
-      } else if (variable.computable !== undefined) {
+      if (variable.computable !== undefined) {
         solvableCount += 1;
       } else if (declaresEquivalents(variable)) {
         // A variable joined to others by `equivalent` links is filled in from
         // whichever member of its group already holds a value.
         solvableCount += 1;
       }
-      validateNumberVariable(where, variable, problems);
+
+      if(isNumberVariable(variable)){
+        validateNumberVariable(where, variable, problems);
+      }
+      else{
+        validateTextVariable(where, variable, problems);
+      }
     }
   }
 
@@ -203,11 +202,6 @@ function variableProblems(variables: readonly VariableDefinition[]): string[] {
     );
   }
 
-  if (solvableCount === 0) {
-    problems.push(
-      'at least one variable must be computable or derive from a table.',
-    );
-  }
 
   return problems;
 }
@@ -665,7 +659,9 @@ function validateTableFieldReference(
 }
 
 /** True when a numeric variable declares at least one equivalent link. */
-function declaresEquivalents(variable: NumberVariableDefinition): boolean {
+function declaresEquivalents(
+  variable: NumberVariableDefinition | TextVariableDefinition,
+): boolean {
   const equivalent = variable.equivalent;
   return (
     typeof equivalent === 'object' &&
@@ -719,19 +715,19 @@ function validateEquivalent(
       );
       continue;
     }
-    if (isTableSelectVariable(target) || isTextVariable(target)) {
-      problems.push(
-        `${where}: equivalent target "${targetName}" must be a numeric ` +
-          'variable.',
-      );
-      continue;
-    }
+
+
     if (typeof convert !== 'function') {
       problems.push(
         `${where}: equivalent["${targetName}"] must be a function.`,
       );
       continue;
+    }    
+    
+    if (isTableSelectVariable(target) ) {
+      continue;
     }
+
     if (typeof target.equivalent?.[variable.name] !== 'function') {
       problems.push(
         `${where}: equivalent target "${targetName}" must declare the ` +

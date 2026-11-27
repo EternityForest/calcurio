@@ -16,7 +16,7 @@ function runtime(): CalculatorRuntime {
   return new CalculatorRuntime(capacitanceAtDcBias, tables);
 }
 
-/** Fills every input for one type and bias, with a 10 µF, 16 V part. */
+/** Fills every input for one type and bias, with a 10 uF, 16 V part. */
 function biased(type: string, voltage: string): CalculatorRuntime {
   const rt = runtime();
   rt.setSelection('capacitorType', type);

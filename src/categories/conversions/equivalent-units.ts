@@ -1,5 +1,4 @@
 import {
-  convertUnit,
   measureOf,
   baseUnitForMeasure,
 } from '../../framework/units.js';

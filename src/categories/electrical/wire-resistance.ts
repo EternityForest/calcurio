@@ -107,8 +107,8 @@ export const wireResistance: CalculatorDefinition = {
       tableField: 'area',
       description: 'Conductor cross-sectional area.',
       equivalent: {
-        diameter: (area) => 2 * Math.sqrt(area / Math.PI),
-        radius: (area) => Math.sqrt(area / Math.PI),
+        diameter: (area: number) => 2 * Math.sqrt(area / Math.PI),
+        radius: (area: number) => Math.sqrt(area / Math.PI),
       },
     },
     {
@@ -119,8 +119,8 @@ export const wireResistance: CalculatorDefinition = {
       tableField: 'diameter',
       description: 'Conductor diameter.',
       equivalent: {
-        area: (diameter) => Math.PI * (diameter / 2) ** 2,
-        radius: (diameter) => diameter / 2,
+        area: (diameter: number) => Math.PI * (diameter / 2) ** 2,
+        radius: (diameter: number) => diameter / 2,
       },
     },
     {
@@ -131,8 +131,8 @@ export const wireResistance: CalculatorDefinition = {
       tableField: 'radius',
       description: 'Conductor radius.',
       equivalent: {
-        area: (radius) => Math.PI * radius ** 2,
-        diameter: (radius) => 2 * radius,
+        area: (radius: number) => Math.PI * radius ** 2,
+        diameter: (radius: number) => 2 * radius,
       },
     },
     {

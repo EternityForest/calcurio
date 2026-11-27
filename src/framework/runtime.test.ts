@@ -926,7 +926,7 @@ function equivalentDefinition(): CalculatorDefinition {
         tableSelect: 'shape',
         tableField: 'area',
         equivalent: {
-          diameter: (area) => 2 * Math.sqrt(area / Math.PI),
+          diameter: (area: number) => 2 * Math.sqrt(area / Math.PI),
         },
       },
       {
@@ -936,7 +936,7 @@ function equivalentDefinition(): CalculatorDefinition {
         tableSelect: 'shape',
         tableField: 'diameter',
         equivalent: {
-          area: (diameter) => Math.PI * (diameter / 2) ** 2,
+          area: (diameter: number) => Math.PI * (diameter / 2) ** 2,
         },
       },
       {

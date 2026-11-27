@@ -4,7 +4,6 @@ import type {
   CalculatorDefinition,
   NumberVariableDefinition,
 } from './types.js';
-import { isTableSelectVariable } from './types.js';
 import type { UnitSymbol } from './units.js';
 import { unchanged } from './unchanged.js';
 import { isValidIdentifier, validateCalculatorDefinition } from './validate.js';
@@ -347,7 +346,7 @@ describe('validateCalculatorDefinition equivalent', () => {
           label: 'Area',
           unit: 'mm^2',
           equivalent: {
-            diameter: (area) => 2 * Math.sqrt(area / Math.PI),
+            diameter: (area: number) => 2 * Math.sqrt(area / Math.PI),
           },
         },
         {
@@ -355,7 +354,7 @@ describe('validateCalculatorDefinition equivalent', () => {
           label: 'Diameter',
           unit: 'mm',
           equivalent: {
-            area: (diameter) => Math.PI * (diameter / 2) ** 2,
+            area: (diameter: number) => Math.PI * (diameter / 2) ** 2,
           },
         },
         { name: 'total', label: 'Total', unit: 'mm', computable: () => 1 },
@@ -376,7 +375,7 @@ describe('validateCalculatorDefinition equivalent', () => {
       validateCalculatorDefinition({
         ...definition,
         variables: [
-          { ...area, equivalent: { nope: (value) => value } },
+          { ...area, equivalent: { nope: (value: number) => value } },
           definition.variables[1]!,
           definition.variables[2]!,
         ],
@@ -391,7 +390,7 @@ describe('validateCalculatorDefinition equivalent', () => {
       validateCalculatorDefinition({
         ...definition,
         variables: [
-          { ...area, equivalent: { area: (value) => value } },
+          { ...area, equivalent: { area: (value: number) => value } },
           definition.variables[1]!,
           definition.variables[2]!,
         ],
@@ -462,7 +461,7 @@ describe('validateCalculatorDefinition equivalent', () => {
         variables: [
           definition.variables[0]!,
           definition.variables[1]!,
-          { ...total, equivalent: { area: (value) => value } },
+          { ...total, equivalent: { area: (value: number) => value } },
         ],
       }),
     ).toThrow(CalculatorDefinitionError);

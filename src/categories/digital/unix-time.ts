@@ -1,4 +1,4 @@
-import type { CalculatorDefinition, CalcState } from '../../framework/types.js';
+import type { CalculatorDefinition } from '../../framework/types.js';
 
 /**
  * Convert between UNIX time representations:

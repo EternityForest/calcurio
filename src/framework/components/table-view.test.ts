@@ -127,7 +127,7 @@ describe('TableView', () => {
     await vi.waitFor(() => {
       expect(dialog.querySelector('dialog')?.open).toBe(true);
     });
-    expect(dialog.textContent).toContain('460 J/(kg·K)');
+    expect(dialog.textContent).toContain('460 J/(kg K)');
   });
 
   it('offers a lookup button for a numeric lookup cell', async () => {
@@ -159,7 +159,7 @@ describe('TableView', () => {
     await vi.waitFor(() => {
       expect(dialog.querySelector('dialog')?.open).toBe(true);
     });
-    expect(dialog.textContent).toContain('4182 J/(kg·K)');
+    expect(dialog.textContent).toContain('4182 J/(kg K)');
   });
 
   it('hides the custom-row toolbar without a store', async () => {
@@ -264,7 +264,7 @@ describe('TableView', () => {
       throw new Error('Missing markdown textarea.');
     }
     const markdown = [
-      '| ID | Name | Density (kg/m3) | Solid | Specific heat (J/(kg·K)@°C) |',
+      '| ID | Name | Density (kg/m^3) | Solid | Specific heat (J/(kg K)@degC) |',
       '| --- | --- | --- | --- | --- |',
       '| brass | Brass | 8500 | yes | 380@20; 400@200 |',
       '',

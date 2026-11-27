@@ -42,7 +42,6 @@ export function equivalentUnitVariables(
       name: entry.name,
       label: entry.label,
       unit: entry.unit,
-      unitOptions: symbols,
       equivalent,
     };
     if (entry.description === undefined) {

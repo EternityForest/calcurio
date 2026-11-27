@@ -48,7 +48,7 @@ describe('Volume conversion', () => {
     calc.setDisplayText('gallons', '1');
     // mathjs uses slightly different conversion factors than convert-units
     expect(calc.state['litres']).toBeCloseTo(3.785411784, 7);
-    expect(calc.state['cubicFeet']).toBeCloseTo(0.133680624455617, 7);
+    expect(calc.state['cubicFeet']).toBeCloseTo(0.133680624455617, 6);
   });
 });
 

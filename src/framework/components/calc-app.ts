@@ -458,6 +458,7 @@ export class CalcApp extends LitElement {
       await handle.load();
     } catch (error) {
       this.loadError = `Could not load ${handle.title}: ${errorMessage(error)}`;
+      console.error(error)
     } finally {
       if (this.loadingCategoryId === categoryId) {
         this.loadingCategoryId = null;

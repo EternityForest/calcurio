@@ -1,18 +1,10 @@
-import { convertUnit } from '../../framework/units.js';
+import {
+  convertUnit,
+  measureOf,
+  baseUnitForMeasure,
+} from '../../framework/units.js';
 import type { UnitSymbol } from '../../framework/units.js';
 import type { NumberVariableDefinition } from '../../framework/types.js';
-
-/** One unit offered as a variable in a conversion calculator. */
-export interface EquivalentUnit {
-  /** Variable name, such as "centimetres". */
-  readonly name: string;
-  /** Label shown in the UI. */
-  readonly label: string;
-  /** Unit the value is stored and displayed in. */
-  readonly unit: UnitSymbol;
-  /** Optional explanation shown under the field. */
-  readonly description?: string;
-}
 
 /**
  * Builds one variable per unit, each joined to the others by `equivalent`
@@ -25,28 +17,41 @@ export interface EquivalentUnit {
  * Conversions go through `convertUnit`, so the results agree exactly with the
  * unit system, including the affine offset for temperatures.
  */
+
 export function equivalentUnitVariables(
-  units: readonly EquivalentUnit[],
+  units: readonly UnitSymbol[],
 ): NumberVariableDefinition[] {
-  const symbols = units.map((entry) => entry.unit);
+  const letters = ['A', 'B', 'C', 'D', 'E','F'
+  ].reverse();
+
+  const first = units[0];
+  if (first == undefined) {
+    throw new Error('empty units list');
+  }
+  const base = baseUnitForMeasure(measureOf(first));
+
+  const u2l: Record<string, string> = {};
+
+  for (const other of units) {
+    u2l[other] = letters.pop()!;
+  }
+
   return units.map((entry) => {
     const equivalent: Record<string, (value: number) => number> = {};
     for (const other of units) {
-      if (other.name === entry.name) {
+      if (other === entry) {
         continue;
       }
-      equivalent[other.name] = (value) =>
-        convertUnit(value, entry.unit, other.unit);
+
+      equivalent[u2l[other]!] = (value) => value;
     }
     const variable: NumberVariableDefinition = {
-      name: entry.name,
-      label: entry.label,
-      unit: entry.unit,
+      name: u2l[entry]!,
+      label: u2l[entry]!,
+      unit: base,
+      defaultDisplayUnit:entry,
       equivalent,
     };
-    if (entry.description === undefined) {
-      return variable;
-    }
-    return { ...variable, description: entry.description };
+    return variable;
   });
 }

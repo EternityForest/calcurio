@@ -10,11 +10,8 @@ export const lengthConversion: CalculatorDefinition = {
   id: 'length',
   title: 'Length',
   description:
-    'Convert between centimetres, inches, and feet. Enter any one value and ' +
-    'the others follow.',
+    'Enter any one value and the others follow.',
   variables: equivalentUnitVariables([
-    { name: 'centimetres', label: 'Centimetres', unit: 'cm' },
-    { name: 'inches', label: 'Inches', unit: 'in' },
-    { name: 'feet', label: 'Feet', unit: 'ft' },
+    "cm","in","ft"
   ]),
 };

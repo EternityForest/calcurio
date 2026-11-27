@@ -10,11 +10,7 @@ export const volumeConversion: CalculatorDefinition = {
   id: 'volume',
   title: 'Volume',
   description:
-    'Convert between gallons, litres, and cubic feet. Enter any one value ' +
-    'and the others follow.',
-  variables: equivalentUnitVariables([
-    { name: 'gallons', label: 'Gallons', unit: 'gal' },
-    { name: 'litres', label: 'Litres', unit: 'l' },
-    { name: 'cubicFeet', label: 'Cubic feet', unit: 'ft^3' },
+    'Enter any one value and the others follow.',
+  variables: equivalentUnitVariables(["gal","l","ft^3"
   ]),
 };

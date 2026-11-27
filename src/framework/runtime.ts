@@ -263,6 +263,7 @@ export class CalculatorRuntime {
     this.bindVariables();
     this.forceNames.clear();
     this.recompute();
+    this.emit();
   }
 
   /**

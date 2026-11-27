@@ -8,8 +8,8 @@ import type {
 } from '../../framework/types.js';
 import {
   defaultUnitForMeasure,
+  isUnitSymbol,
   measurementKinds,
-  measureOf,
   type MeasureName,
   type UnitSymbol,
 } from '../../framework/units.js';
@@ -65,17 +65,17 @@ export const unitConfig: readonly ConfigFieldDefinition[] = [
 /** Reads the unit from config, defaulting to dimensionless. */
 export function getUnit(config: CalculatorConfig): UnitSymbol {
   const raw = config['unit'];
-  if (typeof raw === 'string') {
-    // Handle custom "1" string which is dimensionless
-    if (raw === '1') {
-      return '1';
-    }
-    // Check if it's a valid measure name or a direct unit
-    try {
-      return measureOf(raw as UnitSymbol) ? (raw as UnitSymbol) : defaultUnitForMeasure(raw as MeasureName);
-    } catch {
-      return '1';
-    }
+  if (typeof raw !== 'string') {
+    return '1';
+  }
+  if (raw === '1') {
+    return '1';
+  }
+  if ((measurementKinds() as readonly string[]).includes(raw)) {
+    return defaultUnitForMeasure(raw as MeasureName);
+  }
+  if (isUnitSymbol(raw)) {
+    return raw;
   }
   return '1';
 }

@@ -116,7 +116,11 @@ export class CalculatorView extends LitElement {
           >
             Bookmarks
           </button>
-          ${runtime.hasComputeState ? this.renderRunActions(runtime) : nothing}
+          ${
+            runtime.hasComputeState && !runtime.hasAutoComputeState
+              ? this.renderRunActions(runtime)
+              : nothing
+          }
         </div>
         ${
           runtime.hasComputeState

@@ -356,6 +356,14 @@ export interface CalculatorDefinition {
     state: Readonly<CalcState>,
     context: ComputeStateContext,
   ) => Promise<CalcState> | CalcState;
+  /**
+   * When true alongside `computeState`, the runtime automatically re-runs
+   * `computeState` after every editable input change, debounced by 300 ms.
+   * In-flight runs are cancelled before each new trigger. The Run/Cancel
+   * buttons are hidden. Defaults to false so manual-async calculators keep
+   * their existing behaviour.
+   */
+  readonly autoComputeState?: boolean;
 }
 
 /** Shape of a lazily imported category module. */

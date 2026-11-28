@@ -471,3 +471,56 @@ describe('CalculatorView find closest', () => {
     expect(view.querySelector('[data-testid="find-closest-shape"]')).toBeNull();
   });
 });
+
+describe('CalculatorView autoComputeState', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  function autoComputeDefinition(
+    computeState: NonNullable<CalculatorDefinition['computeState']>,
+  ): CalculatorDefinition {
+    return {
+      id: 'auto-compute-state',
+      title: 'Auto compute state',
+      variables: [
+        { name: 'a', label: 'A', unit: 'V' },
+        { name: 'b', label: 'B', unit: 'V' },
+        { name: 'sum', label: 'Sum', unit: 'V', computable: () => unchanged() },
+      ],
+      autoComputeState: true,
+      computeState,
+    };
+  }
+
+  it('hides Run and Cancel buttons when autoComputeState is true', async () => {
+    const runtime = new CalculatorRuntime(
+      autoComputeDefinition((state) => ({ ...state, sum: 3 })),
+    );
+    runtime.setDisplayText('a', '1');
+    runtime.setDisplayText('b', '2');
+    const view = await mount(runtime, null);
+
+    expect(view.querySelector('[data-testid="run"]')).toBeNull();
+    expect(view.querySelector('[data-testid="cancel"]')).toBeNull();
+  });
+
+  it('auto-updates result when inputs change', async () => {
+    const runtime = new CalculatorRuntime(
+      autoComputeDefinition((state) => ({
+        ...state,
+        sum: (state['a'] as number) + (state['b'] as number),
+      })),
+    );
+    runtime.setDisplayText('a', '1');
+    runtime.setDisplayText('b', '2');
+    const view = await mount(runtime, null);
+
+    await vi.waitFor(() => {
+      const input = view.querySelector<HTMLInputElement>(
+        '[data-testid="value-sum"]',
+      );
+      expect(input?.value).toBe('3');
+    });
+  });
+});

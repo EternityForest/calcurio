@@ -219,6 +219,10 @@ export class CalculatorRuntime {
   private issues: ValidationIssue[] = [];
   private runController: AbortController | null = null;
   private displayItems: OutputDisplayItem[] = [];
+  /** Timer handle for debouncing auto-computeState triggers. */
+  private autoComputeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True when inputs changed while a run was in flight. */
+  private needsAutoCompute = false;
 
   constructor(
     definition: CalculatorDefinition,
@@ -351,6 +355,14 @@ export class CalculatorRuntime {
     return this.definition.computeState !== undefined;
   }
 
+  /** True when the definition auto-runs computeState on input changes. */
+  get hasAutoComputeState(): boolean {
+    return (
+      this.hasComputeState &&
+      this.definition.autoComputeState === true
+    );
+  }
+
   /** True while an async `computeState` run is in flight. */
   get isRunning(): boolean {
     return this.runController !== null;
@@ -364,12 +376,14 @@ export class CalculatorRuntime {
     return [...this.displayItems];
   }
 
-  /**
-   * True when a `computeState` run can start: the calculator must have a
-   * `computeState` and every editable input must hold a value.
-   */
+  /** True when a `computeState` run can start: the calculator must have a
+   * `computeState` and every editable input must hold a value. */
   canRunComputeState(): boolean {
     if (!this.hasComputeState || this.isRunning) {
+      return false;
+    }
+    // Auto-compute calculators never need manual runs.
+    if (this.hasAutoComputeState) {
       return false;
     }
     return this.variableList.every((variable) => {
@@ -762,12 +776,21 @@ export class CalculatorRuntime {
       if (this.runController === controller) {
         this.runController = null;
       }
+      // If inputs changed while running, schedule another run immediately.
+      if (this.needsAutoCompute) {
+        this.needsAutoCompute = false;
+        this.runAutoCompute().catch(() => {
+          // Errors are reported via addError inside runAutoCompute.
+        });
+      }
       this.emit();
     }
   }
 
   /** Cancels the in-flight `computeState` run, if any. */
   cancelComputeState(): void {
+    this.autoComputeTimer = null;
+    this.needsAutoCompute = false;
     this.runController?.abort();
   }
 
@@ -1843,7 +1866,74 @@ export class CalculatorRuntime {
     if (value !== null) {
       this.resolvePinnedDeadlock();
     }
-    this.recompute();
+
+    // Auto-compute calculators defer to a debounced computeState run.
+    if (this.hasAutoComputeState && !this.isRunning) {
+      this.scheduleAutoCompute();
+    } else {
+      this.recompute();
+    }
+  }
+
+  /** Schedules a debounced re-run of computeState. Cancels any pending timer. */
+  private scheduleAutoCompute(): void {
+    if (this.isRunning) {
+      // Defer until the current run finishes.
+      this.needsAutoCompute = true;
+      return;
+    }
+    if (this.autoComputeTimer !== null) {
+      clearTimeout(this.autoComputeTimer);
+    }
+    this.autoComputeTimer = setTimeout(() => {
+      this.autoComputeTimer = null;
+      this.runAutoCompute().catch(() => {
+        // Errors are reported via addError inside runAutoCompute.
+      });
+    }, 300);
+  }
+
+  /** Runs computeState with automatic abort of any previous in-flight run. */
+  private async runAutoCompute(): Promise<void> {
+    const compute = this.definition.computeState;
+    if (compute === undefined) {
+      return;
+    }
+
+    // Abort any prior in-flight run so only the latest result wins.
+    this.cancelComputeState();
+
+    const controller = new AbortController();
+    this.runController = controller;
+    this.clearDisplay();
+    this.errorMessages = [];
+    this.emit();
+
+    const snapshot = Object.freeze({ ...this.values });
+    const context: ComputeStateContext = {
+      signal: controller.signal,
+      display: (content, dispose) => {
+        this.addDisplayItem(controller, content, dispose);
+      },
+    };
+
+    try {
+      const result = await compute(snapshot, context);
+      if (!controller.signal.aborted) {
+        this.applyComputedState(result);
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        this.addError(
+          `${this.definition.title} failed: ${errorMessage(error)}`,
+        );
+      }
+    } finally {
+      if (this.runController === controller) {
+        this.runController = null;
+      }
+      this.emit();
+    }
   }
 
   /**

@@ -762,6 +762,123 @@ describe('computeState', () => {
     const runtime = new CalculatorRuntime(doublingDefinition());
     await expect(runtime.computeState()).rejects.toThrow('has no computeState');
   });
+
+  describe('autoComputeState', () => {
+    function autoComputeDefinition(
+      computeState: NonNullable<CalculatorDefinition['computeState']>,
+    ): CalculatorDefinition {
+      return {
+        id: 'auto-compute-state',
+        title: 'Auto compute state',
+        variables: [
+          { name: 'a', label: 'A', unit: 'V' },
+          { name: 'b', label: 'B', unit: 'V' },
+          { name: 'sum', label: 'Sum', unit: 'V', computable: () => unchanged() },
+        ],
+        autoComputeState: true,
+        computeState,
+      };
+    }
+
+    it('reports hasAutoComputeState', () => {
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition((state) => ({ ...state })),
+      );
+      expect(runtime.hasComputeState).toBe(true);
+      expect(runtime.hasAutoComputeState).toBe(true);
+      expect(runtime.isRunning).toBe(false);
+    });
+
+    it('isComputable returns true for derived variables', () => {
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition((state) => ({ ...state })),
+      );
+      expect(runtime.isComputable('sum')).toBe(true);
+    });
+
+    it('canRunComputeState returns false for auto-compute calculators', () => {
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition((state) => ({ ...state })),
+      );
+      runtime.setDisplayText('a', '1');
+      runtime.setDisplayText('b', '2');
+      expect(runtime.canRunComputeState()).toBe(false);
+    });
+
+    it('auto-runs computeState after an input change with debounce', async () => {
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition((state) => ({ ...state, sum: (state['a'] as number) + (state['b'] as number) })),
+      );
+      runtime.setDisplayText('a', '1');
+      runtime.setDisplayText('b', '2');
+      expect(runtime.state['sum']).toBeNull();
+
+      await vi.waitFor(() => {
+        expect(runtime.state['sum']).toBe(3);
+      });
+    });
+
+    it('debounces rapid changes by cancelling previous timers', async () => {
+      let callCount = 0;
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition(async (state) => {
+          callCount += 1;
+          return { ...state, sum: 99 };
+        }),
+      );
+      runtime.setDisplayText('a', '1');
+      runtime.setDisplayText('b', '2');
+      // Trigger several more changes within the debounce window.
+      runtime.setDisplayText('a', '5');
+      runtime.setDisplayText('a', '10');
+
+      await vi.waitFor(() => {
+        expect(callCount).toBeGreaterThanOrEqual(1);
+        expect(runtime.state['sum']).toBe(99);
+      }, 2000);
+    });
+
+    it('defers a new run when inputs change during an in-flight run', async () => {
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition((state) => ({
+          ...state,
+          sum: ((state['a'] as number) ?? 0) + ((state['b'] as number) ?? 0),
+        })),
+      );
+      runtime.setDisplayText('a', '1');
+      runtime.setDisplayText('b', '2');
+
+      // Wait for the first run to complete.
+      await vi.waitFor(() => runtime.state['sum'] === 3, {
+        timeout: 1000,
+        interval: 50,
+      });
+
+      // Second trigger schedules a fresh debounce timer.
+      runtime.setDisplayText('a', '5');
+
+      // Wait for the second run to complete.
+      await vi.waitFor(() => runtime.state['sum'] === 7, {
+        timeout: 1000,
+        interval: 50,
+      });
+    });
+
+    it('shows errors from failed computeState', async () => {
+      const runtime = new CalculatorRuntime(
+        autoComputeDefinition(() => {
+          throw new Error('boom');
+        }),
+      );
+      runtime.setDisplayText('a', '1');
+      runtime.setDisplayText('b', '2');
+
+      await vi.waitFor(() => {
+        expect(runtime.errors.length).toBeGreaterThan(0);
+      });
+      expect(runtime.errors[0]).toContain('failed: boom');
+    });
+  });
 });
 
 describe('defaults', () => {

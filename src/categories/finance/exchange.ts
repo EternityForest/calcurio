@@ -169,21 +169,6 @@ async function populateFiatPairs(
       continue;
     }
     storeRate(cache, base, currency, rate);
-    storeRate(cache, currency, base, 1 / rate);
-  }
-  const codes = Object.keys(rates).filter((code) => {
-    const rate = rates[code];
-    return typeof rate === 'number' && Number.isFinite(rate) && rate > 0;
-  });
-  for (const from of codes) {
-    for (const to of codes) {
-      if (from === to) {
-        continue;
-      }
-      const fromRate = rates[from]!;
-      const toRate = rates[to]!;
-      storeRate(cache, from, to, toRate / fromRate);
-    }
   }
 }
 

@@ -8,10 +8,12 @@ export const currencyConverter: CalculatorDefinition = {
   title: 'Currency converter',
   description:
     'Convert an amount between currencies using live exchange rates. ' +
-    'Gold, silver, Bitcoin, and Ethereum are priced as currencies too.',
+    'Gold, silver, Bitcoin, and Ethereum are priced as currencies too.' +
+    'Updates every 24 hours, so accuracy might not be equal to true live converters',
   headerHtml:
     '<a href="https://www.exchangerate-api.com">Rates By Exchange Rate API</a> · ' +
     '<a href="https://gold-api.com">Gold API</a>',
+  autoComputeState: true,
   variables: [
     {
       name: 'amount',
@@ -41,7 +43,7 @@ export const currencyConverter: CalculatorDefinition = {
       unit: '1',
       unitOptions: ['1'],
       editable: false,
-      description: 'Converted amount. Press Run to calculate.',
+      description: 'Converted amount.',
       computable: () => unchanged(),
     },
   ],

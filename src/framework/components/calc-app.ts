@@ -160,7 +160,10 @@ export class CalcApp extends LitElement {
     });
 
     return html`
-      <p class="help">Choose a category to browse its calculators.</p>
+      <p class="help">
+      <span class="warning">This is a new project made with LLM assistance in the proof of concept stage, do your own diligence before trusting accuracy.</span>
+      </p>
+      <p><a href="https://github.com/EternityForest/calcurio">Source Code under MIT License</a></p>
       <div class="calc-tiles">${tiles}</div>
     `;
   }

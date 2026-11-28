@@ -9,7 +9,7 @@ export const currencyConverter: CalculatorDefinition = {
   description:
     'Convert an amount between currencies using live exchange rates. ' +
     'Gold, silver, Bitcoin, and Ethereum are priced as currencies too.' +
-    'Updates every 24 hours, so accuracy might not be equal to true live converters.',
+    'Updates every 24 hours, so accuracy might not be equal to true realtime converters.',
   headerHtml:
     '<a href="https://www.exchangerate-api.com">Rates By Exchange Rate API</a> · ' +
     '<a href="https://gold-api.com">Gold API</a>',

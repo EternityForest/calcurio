@@ -44,7 +44,8 @@ export type UnitSymbol =
   | VolumeUnit
   | FlowRateUnit
   | DataUnit
-  | DataRateUnit;
+  | DataRateUnit
+  | AmpHourUnit;
 
 /** Area units. */
 export type AreaUnit =
@@ -107,6 +108,9 @@ export type TimeUnit = 's' | 'ms' | 'us' | 'ns' | 'min' | 'h' | 'day' | 'week' |
 
 /** Electrical current units. */
 export type CurrentUnit = 'A' | 'mA' | 'uA' | 'nA' | 'kA';
+
+/** Electrical charge units (amp-hours). */
+export type AmpHourUnit = 'Ah' | 'mAh';
 
 /**
  * Temperature units (absolute). mathjs uses K natively; we keep that symbol.
@@ -288,7 +292,8 @@ export type MeasureName =
   | 'flow_rate'
   | 'delta_temperature'
   | 'data'
-  | 'data_rate';
+  | 'data_rate'
+  | 'amp_hour';
 
 /**
  * Unit to measurement kind mapping for validation and display.
@@ -543,6 +548,9 @@ const UNIT_TO_MEASURE: ReadonlyMap<UnitSymbol, MeasureName> = new Map([
   ['gal/s', 'flow_rate'],
   ['ft^3/s', 'flow_rate'],
   ['cfm', 'flow_rate'],
+  // Amp-hours (electrical charge)
+  ['Ah', 'amp_hour'],
+  ['mAh', 'amp_hour'],
 ]);
 
 /** Units that share the same base (can be converted between). */
@@ -584,6 +592,7 @@ const MEASURE_UNITS: ReadonlyMap<MeasureName, readonly UnitSymbol[]> = new Map([
   ['flow_rate', ['m^3/s', 'l/min', 'l/s', 'gal/min', 'gal/s', 'ft^3/s', 'cfm']],
   ['data', ['bit', 'byte', 'kb', 'kB', 'Mb', 'MB', 'Gb', 'GB', 'Tb', 'TB', 'Pb', 'PB', 'Eb', 'EB']],
   ['data_rate', ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps', 'Bps', 'kBps', 'MBps', 'GBps', 'TBps']],
+  ['amp_hour', ['Ah', 'mAh']],
 ]);
 
 // ============================================================================
@@ -606,6 +615,8 @@ const CUSTOM_UNITS: Record<string, { definition: string; offset?: number }> = {
   mH: { definition: '0.001 H' },
   uH: { definition: '0.000001 H' },
   nH: { definition: '0.000000001 H' },
+  // Amp-hours (electrical charge)
+  mAh: { definition: '0.001 Ah' },
   // Resistivity
   ohm_m: { definition: 'ohm m' },
   ohm_cm: { definition: '0.01 ohm m' },

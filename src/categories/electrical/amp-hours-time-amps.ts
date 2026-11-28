@@ -24,8 +24,8 @@ export const ampHoursTimeAmps: CalculatorDefinition = {
     {
       name: 'capacity',
       label: 'Capacity',
-      unit: '1',
-      defaultDisplayUnit: '1',
+      unit: 'Ah',
+      defaultDisplayUnit: 'mAh',
       description: 'Battery capacity in amp-hours (Ah).',
       validate: (state) => {
         const cap = numberOrNull(state, 'capacity');

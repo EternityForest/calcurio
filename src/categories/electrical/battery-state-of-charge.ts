@@ -20,17 +20,6 @@ function valueOf(state: Readonly<CalcState>, name: string): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
-/** Divides two known values, or null when either is missing or zero. */
-function divideOrNull(
-  numerator: number | null,
-  denominator: number | null,
-): number | null {
-  if (numerator === null || denominator === null || denominator === 0) {
-    return null;
-  }
-  return numerator / denominator;
-}
-
 
 export const batteryStateOfCharge: CalculatorDefinition = {
   id: 'battery-state-of-charge',

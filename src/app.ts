@@ -14,7 +14,7 @@ export const CATEGORY_MANIFEST = {
   },
   geometry: {
     title: 'Geometry',
-    description: 'Circles, spheres, and right-triangle geometry.',
+    description: 'Circles, spheres, polygons, and right-triangle geometry.',
     load: () => import('./categories/geometry/index.js'),
   },
   mechanical: {
@@ -37,7 +37,7 @@ export const CATEGORY_MANIFEST = {
   },
   physics: {
     title: 'Physics',
-    description: 'Wave propagation and the speed of light in media.',
+    description: 'Wave propagation, kinetic energy, and the speed of light in media.',
     load: () => import('./categories/physics/index.js'),
   },
   spice: {
@@ -52,7 +52,7 @@ export const CATEGORY_MANIFEST = {
   },
   digital: {
     title: 'Digital',
-    description: 'Binary, hex, and UNIX time conversions.',
+    description: 'Binary, hex, UNIX time, and data transfer calculations.',
     load: () => import('./categories/digital/index.js'),
   },
   random: {
@@ -70,6 +70,16 @@ export const CATEGORY_MANIFEST = {
     description: 'Build your own multistep calculators.',
     load: () => import('./categories/custom/index.js'),
     hub: 'calc-custom-hub',
+  },
+  speed: {
+    title: 'Speed',
+    description: 'Speed, distance, and time relationships.',
+    load: () => import('./categories/speed/index.js'),
+  },
+  acoustics: {
+    title: 'Acoustics',
+    description: 'Sound delay and travel time in various media.',
+    load: () => import('./categories/acoustics/index.js'),
   },
 } as const satisfies CategoryManifest;
 

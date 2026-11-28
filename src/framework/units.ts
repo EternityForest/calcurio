@@ -42,7 +42,9 @@ export type UnitSymbol =
   | DeltaTemperatureUnit
   | AreaUnit
   | VolumeUnit
-  | FlowRateUnit;
+  | FlowRateUnit
+  | DataUnit
+  | DataRateUnit;
 
 /** Area units. */
 export type AreaUnit =
@@ -215,8 +217,38 @@ export type AngleUnit = 'rad' | 'deg' | 'grad' | 'arcmin' | 'arcsec';
 /** Dimensionless units (count, percent). */
 export type DimensionlessUnit = 'count' | 'percent' | '1';
 
-/** Decibel unit (logarithmic). */
-export type DecibelUnit = 'dB';
+/** Decibel units (logarithmic - require special conversion handling). */
+export type DecibelUnit = 'dB' | 'dBm' | 'dBSPL';
+
+/** Data storage units (bits and bytes). */
+export type DataUnit =
+  | 'bit'
+  | 'byte'
+  | 'kb'
+  | 'kB'
+  | 'Mb'
+  | 'MB'
+  | 'Gb'
+  | 'GB'
+  | 'Tb'
+  | 'TB'
+  | 'Pb'
+  | 'PB'
+  | 'Eb'
+  | 'EB';
+
+/** Data transfer rate units (bits/bytes per second). */
+export type DataRateUnit =
+  | 'bps'
+  | 'kbps'
+  | 'Mbps'
+  | 'Gbps'
+  | 'Tbps'
+  | 'Bps'
+  | 'kBps'
+  | 'MBps'
+  | 'GBps'
+  | 'TBps';
 
 /** Every measurement kind the unit system understands. */
 export type MeasureName =
@@ -254,7 +286,9 @@ export type MeasureName =
   | 'area'
   | 'volume'
   | 'flow_rate'
-  | 'delta_temperature';
+  | 'delta_temperature'
+  | 'data'
+  | 'data_rate';
 
 /**
  * Unit to measurement kind mapping for validation and display.
@@ -451,6 +485,34 @@ const UNIT_TO_MEASURE: ReadonlyMap<UnitSymbol, MeasureName> = new Map([
   ['1', 'dimensionless'],
   // Decibel
   ['dB', 'decibel'],
+  ['dBm', 'decibel'],
+  ['dBSPL', 'decibel'],
+  // Data
+  ['bit', 'data'],
+  ['byte', 'data'],
+  ['kb', 'data'],
+  ['kB', 'data'],
+  ['Mb', 'data'],
+  ['MB', 'data'],
+  ['Gb', 'data'],
+  ['GB', 'data'],
+  ['Tb', 'data'],
+  ['TB', 'data'],
+  ['Pb', 'data'],
+  ['PB', 'data'],
+  ['Eb', 'data'],
+  ['EB', 'data'],
+  // Data rate
+  ['bps', 'data_rate'],
+  ['kbps', 'data_rate'],
+  ['Mbps', 'data_rate'],
+  ['Gbps', 'data_rate'],
+  ['Tbps', 'data_rate'],
+  ['Bps', 'data_rate'],
+  ['kBps', 'data_rate'],
+  ['MBps', 'data_rate'],
+  ['GBps', 'data_rate'],
+  ['TBps', 'data_rate'],
   // Area
   ['m^2', 'area'],
   ['cm^2', 'area'],
@@ -516,10 +578,12 @@ const MEASURE_UNITS: ReadonlyMap<MeasureName, readonly UnitSymbol[]> = new Map([
   ['acceleration', ['m/s^2', 'ft/s^2', 'g_n']],
   ['angle', ['rad', 'deg', 'grad', 'arcmin', 'arcsec']],
   ['dimensionless', ['count', 'percent', '1']],
-  ['decibel', ['dB']],
+  ['decibel', ['dB', 'dBm', 'dBSPL']],
   ['area', ['m^2', 'cm^2', 'mm^2', 'km^2', 'in^2', 'ft^2', 'yd^2', 'mi^2', 'ac', 'ha']],
   ['volume', ['m^3', 'cm^3', 'mm^3', 'l', 'ml', 'gal', 'ft^3', 'in^3', 'yd^3', 'cf']],
   ['flow_rate', ['m^3/s', 'l/min', 'l/s', 'gal/min', 'gal/s', 'ft^3/s', 'cfm']],
+  ['data', ['bit', 'byte', 'kb', 'kB', 'Mb', 'MB', 'Gb', 'GB', 'Tb', 'TB', 'Pb', 'PB', 'Eb', 'EB']],
+  ['data_rate', ['bps', 'kbps', 'Mbps', 'Gbps', 'Tbps', 'Bps', 'kBps', 'MBps', 'GBps', 'TBps']],
 ]);
 
 // ============================================================================
@@ -630,6 +694,39 @@ const CUSTOM_UNITS: Record<string, { definition: string; offset?: number }> = {
   gal_s: { definition: '0.003785411784 m^3/s' },
   ft3_s: { definition: 'ft^3/s' },
   cfm: { definition: 'ft^3/min' },
+  // Data storage (bits and bytes - using bit as base)
+  bit: { definition: 'bit' },
+  byte: { definition: '8 bit' },
+  kb: { definition: '1000 bit' },
+  kB: { definition: '8000 bit' },
+  Mb: { definition: '1000000 bit' },
+  MB: { definition: '8000000 bit' },
+  Gb: { definition: '1000000000 bit' },
+  GB: { definition: '8000000000 bit' },
+  Tb: { definition: '1000000000000 bit' },
+  TB: { definition: '8000000000000 bit' },
+  Pb: { definition: '1000000000000000 bit' },
+  PB: { definition: '8000000000000000 bit' },
+  Eb: { definition: '1000000000000000000 bit' },
+  EB: { definition: '8000000000000000000 bit' },
+  // Data rate (use 1/s as base to avoid mathjs bug with bit/s and byte/s)
+  bps: { definition: '1/s' },
+  kbps: { definition: '1000 bps' },
+  Mbps: { definition: '1000000 bps' },
+  Gbps: { definition: '1000000000 bps' },
+  Tbps: { definition: '1000000000000 bps' },
+  Bps: { definition: '8 bps' },
+  kBps: { definition: '8000 bps' },
+  MBps: { definition: '8000000 bps' },
+  GBps: { definition: '8000000000 bps' },
+  TBps: { definition: '8000000000000 bps' },
+  // Parts per notation (will be handled specially in conversion)
+  ppm: { definition: '1e-6' },
+  ppb: { definition: '1e-9' },
+  ppt: { definition: '1e-12' },
+  // Decibel variants (defined but will be isolated in conversion)
+  dBm: { definition: '1 dBm' },
+  dBSPL: { definition: '1 dBSPL' },
 };
 
 // Register custom units with mathjs
@@ -650,19 +747,114 @@ for (const [name, config] of Object.entries(CUSTOM_UNITS)) {
 // ============================================================================
 
 /**
+ * Units that require special conversion handling. These are ratio-based or
+ * logarithmic units where the standard linear conversion doesn't apply.
+ */
+const SPECIAL_CONVERSION_UNITS: ReadonlySet<string> = new Set([
+  'percent',
+  'ppm',
+  'ppb',
+  'ppt',
+  'dB',
+  'dBm',
+  'dBSPL',
+]);
+
+/**
+ * Returns true if the unit requires special conversion handling.
+ * These units should not use standard mathjs conversion.
+ */
+export function isSpecialConversionUnit(unit: string): boolean {
+  return SPECIAL_CONVERSION_UNITS.has(unit);
+}
+
+/**
+ * Converts a value through special ratio units (percent, ppm, ppb, ppt).
+ * Returns null if no special handling applies.
+ *
+ * For percent: 50% -> 0.5, 0.5 -> 50%
+ * For ppm/ppb/ppt: converts to/from the base ratio value
+ */
+function convertSpecialRatio(
+  value: number,
+  from: UnitSymbol,
+  to: UnitSymbol,
+): number | null {
+  const multipliers: Record<string, number> = {
+    percent: 0.01,
+    ppm: 1e-6,
+    ppb: 1e-9,
+    ppt: 1e-12,
+  };
+
+  const fromMultiplier = multipliers[from];
+  const toMultiplier = multipliers[to];
+
+  // Both are ratio units - convert between them
+  if (fromMultiplier !== undefined && toMultiplier !== undefined) {
+    // First convert to base (ratio), then to target
+    const baseValue = value * fromMultiplier;
+    return baseValue / toMultiplier;
+  }
+
+  // From ratio unit to dimensionless - convert to base ratio
+  if (fromMultiplier !== undefined && toMultiplier === undefined && (to === '1' || to === 'count')) {
+    return value * fromMultiplier;
+  }
+
+  // From dimensionless to ratio unit - convert from base ratio
+  if (fromMultiplier === undefined && toMultiplier !== undefined && (from === '1' || from === 'count')) {
+    return value / toMultiplier;
+  }
+
+  return null;
+}
+
+/**
  * Converts a value between two units of the same kind.
  * Throws if units are incompatible.
- * Dimensionless units ('1', 'count', 'percent') and decibel units pass through unchanged.
+ * Handles special units (percent, ppm, ppb, ppt, dB, dBm, dBSPL) specially.
  */
 export function convertUnit(
   value: number,
   from: UnitSymbol,
   to: UnitSymbol,
 ): number {
-  // Dimensionless and dB units don't need conversion - the value passes through
-  if (isDimensionless(from) || isDimensionless(to) || from === 'dB' || to === 'dB') {
+  // Handle special ratio conversions (percent, ppm, ppb, ppt)
+  const specialResult = convertSpecialRatio(value, from, to);
+  if (specialResult !== null) {
+    return specialResult;
+  }
+
+  // Handle decibel units - these should error as they require logarithmic conversion
+  // which math.js can't do properly. Check both from and to for any dB unit.
+  const fromIsDecibel = from === 'dB' || from === 'dBm' || from === 'dBSPL';
+  const toIsDecibel = to === 'dB' || to === 'dBm' || to === 'dBSPL';
+
+  // If both are the same decibel unit, allow it (pass through)
+  if (fromIsDecibel && toIsDecibel && from === to) {
     return value;
   }
+
+  // If either unit is a different decibel unit, we can't convert it properly
+  if (fromIsDecibel || toIsDecibel) {
+    // Try mathjs anyway - it should fail for these since they're not properly defined
+    try {
+      const result = mathjs.unit(value, from).to(to);
+      return result.toNumber() as number;
+    } catch {
+      // This is expected - decibel conversions require special handling
+      throw new Error(
+        `Cannot convert ${value} ${from} to ${to}: decibel units require special conversion handling`,
+      );
+    }
+  }
+
+  // Dimensionless '1' and 'count' pass through unchanged
+  if (isDimensionless(from) || isDimensionless(to)) {
+    return value;
+  }
+
   try {
     const result = mathjs.unit(value, from).to(to);
     return result.toNumber() as number;
@@ -748,6 +940,8 @@ export function measurementKinds(): readonly MeasureName[] {
     'area',
     'volume',
     'flow_rate',
+    'data',
+    'data_rate',
   ];
 }
 

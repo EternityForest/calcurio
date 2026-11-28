@@ -2,7 +2,11 @@ import type {
   CalculatorDefinition,
   TableSource,
 } from '../../framework/types.js';
+import { ampHoursTimeAmps } from './amp-hours-time-amps.js';
+import { capacitorStoredEnergy } from './capacitor-stored-energy.js';
 import { capacitorTypesTable } from '../../models/capacitor-types.js';
+import { energyWattsTime } from './energy-watts-time.js';
+import { inductorStoredEnergy } from './inductor-stored-energy.js';
 import { inductorTypesTable } from '../../models/inductor-types.js';
 import { capacitanceAtDcBias } from './capacitance-at-dc-bias.js';
 import { capacitorImpedance } from './capacitor-impedance.js';
@@ -44,4 +48,8 @@ export const calculators: readonly CalculatorDefinition[] = [
   capacitanceAtDcBias,
   wireResistance,
   friis,
+  ampHoursTimeAmps,
+  energyWattsTime,
+  capacitorStoredEnergy,
+  inductorStoredEnergy,
 ];

@@ -2,6 +2,7 @@ import type {
   CalculatorDefinition,
   TableDefinition,
 } from '../../framework/types.js';
+import { flowRateTimeVolume } from './flow-rate-time-volume.js';
 import { materialsTable } from '../../models/materials.js';
 import { orificeFlow } from './orifice-flow.js';
 import { pipeFlow } from './pipe-flow.js';
@@ -15,4 +16,5 @@ export const calculators: readonly CalculatorDefinition[] = [
   pipeFlow,
   pipePressureDrop,
   pressureAreaForce,
+  flowRateTimeVolume,
 ];

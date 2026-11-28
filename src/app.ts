@@ -52,7 +52,7 @@ export const CATEGORY_MANIFEST = {
   },
   digital: {
     title: 'Digital',
-    description: 'Binary, hex, and IEEE floating point conversions.',
+    description: 'Binary, hex, and UNIX time conversions.',
     load: () => import('./categories/digital/index.js'),
   },
   random: {

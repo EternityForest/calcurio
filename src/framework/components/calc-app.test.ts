@@ -68,6 +68,7 @@ customElements.define('test-hub', TestHub);
 
 describe('CalcApp', () => {
   afterEach(() => {
+    window.location.hash = '#';
     document.body.replaceChildren();
   });
 

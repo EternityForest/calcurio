@@ -103,6 +103,7 @@ export class CalcApp extends LitElement {
   private readonly runtimes = new Map<string, CachedRuntime>();
   private popStateHandler: (() => void) | null = null;
   private pendingCategoryId: string | null = null;
+  private view: View = { kind: 'categories' };
 
   override createRenderRoot(): HTMLElement {
     return this;
@@ -143,7 +144,8 @@ export class CalcApp extends LitElement {
       const newView = parseHash(window.location.hash);
       if (newView !== null && newView.kind !== this.view.kind) {
         // Browser navigated — pop our stack to match and restore the target view.
-        while (this.history.length > 1 && this.history[this.history.length - 1].kind !== newView.kind) {
+        const top = this.history[this.history.length - 1]!;
+        while (this.history.length > 1 && top.kind !== newView.kind) {
           this.history.pop();
         }
         this.view = this.history[this.history.length - 1]!;

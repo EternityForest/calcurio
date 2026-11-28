@@ -168,6 +168,7 @@ async function populateFiatPairs(
     if (currency === base) {
       continue;
     }
+    // Direct pair: base → currency
     storeRate(cache, base, currency, rate);
   }
 }

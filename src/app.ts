@@ -81,6 +81,11 @@ export const CATEGORY_MANIFEST = {
     description: 'Sound delay and travel time in various media.',
     load: () => import('./categories/acoustics/index.js'),
   },
+  music: {
+    title: 'Music',
+    description: 'Notes, MIDI numbers, and equal-temperament frequencies.',
+    load: () => import('./categories/music/index.js'),
+  },
 } as const satisfies CategoryManifest;
 
 export type App = CalculatorApp<typeof CATEGORY_MANIFEST>;

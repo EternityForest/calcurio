@@ -1397,3 +1397,215 @@ describe('CalculatorRuntime two-dimensional lookups', () => {
     expect(calc.findClosestRow('material')).toBe('water');
   });
 });
+
+/**
+ * A table of battery packs whose chemistry column names a row of the
+ * chemistries table, used to exercise a select bound to another select.
+ */
+const packsTable: TableDefinition = {
+  id: 'packs',
+  title: 'Packs',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    { key: 'chemistry', label: 'Chemistry' },
+    { key: 'cells', label: 'Cells', unit: 'count' },
+  ],
+  rows: [
+    { id: 'aa', label: 'AA', chemistry: 'nimh', cells: 1 },
+    { id: 'nine-volt', label: '9V', chemistry: 'alkaline', cells: 6 },
+  ],
+};
+
+/** A table of cell chemistries, keyed by the packs table's chemistry column. */
+const chemistriesTable: TableDefinition = {
+  id: 'chemistries',
+  title: 'Chemistries',
+  keyColumn: 'id',
+  labelColumn: 'label',
+  columns: [
+    { key: 'id', label: 'ID' },
+    { key: 'label', label: 'Label' },
+    { key: 'nominal', label: 'Nominal', unit: 'V' },
+  ],
+  rows: [
+    { id: 'nimh', label: 'NiMH', nominal: 1.2 },
+    { id: 'alkaline', label: 'Alkaline', nominal: 1.5 },
+  ],
+};
+
+/**
+ * A definition whose chemistry select reads the pack select's row, and whose
+ * nominal cell voltage reads the chemistry select's row.
+ */
+function packsDefinition(): CalculatorDefinition {
+  return {
+    id: 'packs',
+    title: 'Packs',
+    variables: [
+      { name: 'pack', label: 'Pack', table: 'packs' },
+      {
+        name: 'chemistry',
+        label: 'Chemistry',
+        table: 'chemistries',
+        tableSelect: 'pack',
+        tableField: 'chemistry',
+      },
+      {
+        name: 'cells',
+        label: 'Cells',
+        unit: 'count',
+        tableSelect: 'pack',
+        tableField: 'cells',
+      },
+      {
+        name: 'nominal',
+        label: 'Nominal',
+        unit: 'V',
+        tableSelect: 'chemistry',
+        tableField: 'nominal',
+      },
+      {
+        name: 'voltage',
+        label: 'Voltage',
+        unit: 'V',
+        computable: (state) => {
+          const nominal = state['nominal'];
+          const cells = state['cells'];
+          return typeof nominal === 'number' &&
+            Number.isFinite(nominal) &&
+            typeof cells === 'number' &&
+            Number.isFinite(cells)
+            ? nominal * cells
+            : missing(['nominal', 'cells']);
+        },
+      },
+    ],
+  };
+}
+
+describe('CalculatorRuntime select bound to a select', () => {
+  function runtime(): CalculatorRuntime {
+    return new CalculatorRuntime(
+      packsDefinition(),
+      new TableRegistry([packsTable, chemistriesTable]),
+    );
+  }
+
+  it('fills a bound select from the parent row and computes downstream', () => {
+    const calc = runtime();
+    calc.setSelection('pack', 'aa');
+    expect(calc.state['chemistry']).toBe('nimh');
+    expect(calc.state['cells']).toBe(1);
+    expect(calc.state['nominal']).toBeCloseTo(1.2, 9);
+    expect(calc.state['voltage']).toBeCloseTo(1.2, 9);
+    expect(calc.errors).toEqual([]);
+  });
+
+  it('follows the parent when another row is chosen', () => {
+    const calc = runtime();
+    calc.setSelection('pack', 'aa');
+    calc.setSelection('pack', 'nine-volt');
+    expect(calc.state['chemistry']).toBe('alkaline');
+    expect(calc.state['cells']).toBe(6);
+    expect(calc.state['voltage']).toBeCloseTo(9, 9);
+  });
+
+  it('allows a custom value by clearing the parent select', () => {
+    const calc = runtime();
+    calc.setSelection('pack', 'nine-volt');
+    calc.setSelection('chemistry', 'nimh');
+    expect(calc.state['chemistry']).toBe('nimh');
+    expect(calc.state['pack']).toBeNull();
+    expect(calc.state['cells']).toBeNull();
+  });
+
+  it('accepts a custom value before any parent row is chosen', () => {
+    const calc = runtime();
+    calc.setSelection('chemistry', 'nimh');
+    expect(calc.state['chemistry']).toBe('nimh');
+    expect(calc.state['pack']).toBeNull();
+    expect(calc.state['nominal']).toBeCloseTo(1.2, 9);
+  });
+
+  it('keeps the parent when the chosen row already matches it', () => {
+    const calc = runtime();
+    calc.setSelection('pack', 'aa');
+    calc.setSelection('chemistry', 'nimh');
+    expect(calc.state['pack']).toBe('aa');
+    expect(calc.state['cells']).toBe(1);
+  });
+
+  it('offers the bound select its own table rows', () => {
+    const calc = runtime();
+    expect(calc.tableChoices('chemistry').map((choice) => choice.key)).toEqual([
+      'nimh',
+      'alkaline',
+    ]);
+  });
+
+  it('restores a bound select from a saved state', () => {
+    const calc = runtime();
+    calc.loadState({
+      pack: 'aa',
+      chemistry: 'nimh',
+      cells: 1,
+      nominal: 1.2,
+      voltage: 1.2,
+    });
+    expect(calc.state['chemistry']).toBe('nimh');
+    expect(calc.state['pack']).toBe('aa');
+    expect(calc.state['voltage']).toBeCloseTo(1.2, 9);
+  });
+
+  it('rejects a bound select that reads a non-text column', () => {
+    const definition: CalculatorDefinition = {
+      id: 'bad',
+      title: 'Bad',
+      variables: [
+        { name: 'pack', label: 'Pack', table: 'packs' },
+        {
+          name: 'chemistry',
+          label: 'Chemistry',
+          table: 'chemistries',
+          tableSelect: 'pack',
+          tableField: 'cells',
+        },
+      ],
+    };
+    expect(
+      () =>
+        new CalculatorRuntime(
+          definition,
+          new TableRegistry([packsTable, chemistriesTable]),
+        ),
+    ).toThrow(/text column/);
+  });
+
+  it('rejects a bound select that names an unknown parent', () => {
+    const definition: CalculatorDefinition = {
+      id: 'bad',
+      title: 'Bad',
+      variables: [
+        { name: 'pack', label: 'Pack', table: 'packs' },
+        {
+          name: 'chemistry',
+          label: 'Chemistry',
+          table: 'chemistries',
+          tableSelect: 'nope',
+          tableField: 'chemistry',
+        },
+      ],
+    };
+    expect(
+      () =>
+        new CalculatorRuntime(
+          definition,
+          new TableRegistry([packsTable, chemistriesTable]),
+        ),
+    ).toThrow(/tableSelect "nope" is not a variable/);
+  });
+});
+

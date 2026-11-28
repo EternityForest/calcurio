@@ -467,3 +467,78 @@ describe('validateCalculatorDefinition equivalent', () => {
     ).toThrow(CalculatorDefinitionError);
   });
 });
+
+describe('validateCalculatorDefinition bound selects', () => {
+  function boundDefinition(
+    overrides: Record<string, unknown> = {},
+  ): CalculatorDefinition {
+    return {
+      id: 'bound',
+      title: 'Bound',
+      variables: [
+        { name: 'pack', label: 'Pack', table: 'packs' },
+        {
+          name: 'chemistry',
+          label: 'Chemistry',
+          table: 'chemistries',
+          tableSelect: 'pack',
+          tableField: 'chemistry',
+          ...overrides,
+        },
+      ],
+    };
+  }
+
+  it('accepts a select bound to another select', () => {
+    expect(() => validateCalculatorDefinition(boundDefinition())).not.toThrow();
+  });
+
+  it('rejects a tableSelect without a tableField', () => {
+    expect(() =>
+      validateCalculatorDefinition(boundDefinition({ tableField: undefined })),
+    ).toThrow(/must be provided together/);
+  });
+
+  it('rejects a tableField without a tableSelect', () => {
+    expect(() =>
+      validateCalculatorDefinition(boundDefinition({ tableSelect: undefined })),
+    ).toThrow(/must be provided together/);
+  });
+
+  it('rejects an empty tableField', () => {
+    expect(() =>
+      validateCalculatorDefinition(boundDefinition({ tableField: '' })),
+    ).toThrow(/must not be empty/);
+  });
+
+  it('rejects a tableSelect that names the variable itself', () => {
+    expect(() =>
+      validateCalculatorDefinition(boundDefinition({ tableSelect: 'chemistry' })),
+    ).toThrow(/must not name the variable itself/);
+  });
+
+  it('rejects a tableSelect that is not a variable', () => {
+    expect(() =>
+      validateCalculatorDefinition(boundDefinition({ tableSelect: 'nope' })),
+    ).toThrow(/is not a variable/);
+  });
+
+  it('rejects a tableSelect that is not a table select', () => {
+    expect(() =>
+      validateCalculatorDefinition({
+        id: 'bound',
+        title: 'Bound',
+        variables: [
+          { name: 'volts', label: 'Volts', unit: 'V' },
+          {
+            name: 'chemistry',
+            label: 'Chemistry',
+            table: 'chemistries',
+            tableSelect: 'volts',
+            tableField: 'chemistry',
+          },
+        ],
+      }),
+    ).toThrow(/is not a table-select variable/);
+  });
+});

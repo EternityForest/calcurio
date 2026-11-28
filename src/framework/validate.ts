@@ -172,10 +172,16 @@ function variableProblems(variables: readonly VariableDefinition[]): string[] {
   }
 
   for (const [index, variable] of variables.entries()) {
-    if (isNumberVariable(variable) && isTableFieldVariable(variable)) {
+    const selectName =
+      isNumberVariable(variable) && isTableFieldVariable(variable)
+        ? variable.tableSelect
+        : isTableSelectVariable(variable)
+          ? variable.tableSelect
+          : undefined;
+    if (selectName !== undefined) {
       validateTableFieldReference(
         `variable ${index + 1} ("${variable.name}")`,
-        variable.tableSelect,
+        selectName,
         variablesByName,
         problems,
       );
@@ -542,11 +548,18 @@ function validateTableSelect(
         'computable function.',
     );
   }
-  if ('tableSelect' in variable || 'tableField' in variable) {
+  const hasSelect = variable.tableSelect !== undefined;
+  const hasField = variable.tableField !== undefined;
+  if (hasSelect !== hasField) {
     problems.push(
-      `${where}: a table-select variable cannot also reference another ` +
-        'table select.',
+      `${where}: tableSelect and tableField must be provided together.`,
     );
+  }
+  if (hasField && variable.tableField === '') {
+    problems.push(`${where}: tableField must not be empty.`);
+  }
+  if (hasSelect && variable.tableSelect === variable.name) {
+    problems.push(`${where}: tableSelect must not name the variable itself.`);
   }
 }
 

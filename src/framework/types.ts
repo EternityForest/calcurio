@@ -142,6 +142,19 @@ export interface TableSelectVariableDefinition extends VariableBase {
    * selector. Use it to hide rows that lack a property the calculator needs.
    */
   readonly filter?: string;
+  /**
+   * Name of another table-select variable whose selected row supplies this
+   * select's key, read from the text column named by `tableField`. This binds
+   * one select to another: the parent row sets this key, and choosing this
+   * row in turn clears the parent so a custom value stands. Requires
+   * `tableField`.
+   */
+  readonly tableSelect?: string;
+  /**
+   * Text column of the parent select's table that holds this select's row
+   * key. Requires `tableSelect`.
+   */
+  readonly tableField?: string;
 
   readonly default?: string;
 }
@@ -181,6 +194,13 @@ export function isTableSelectVariable(
 /** True when a numeric variable reads one column of a table selection. */
 export function isTableFieldVariable(
   variable: NumberVariableDefinition,
+): boolean {
+  return variable.tableSelect !== undefined;
+}
+
+/** True when a table select reads its key from another select's row. */
+export function isSelectFieldVariable(
+  variable: TableSelectVariableDefinition,
 ): boolean {
   return variable.tableSelect !== undefined;
 }

@@ -15,10 +15,12 @@ import {
   findRow,
   isLookupColumn,
   isNumericColumn,
+  isTextColumn,
   numericCell,
   rowKey,
   rowLabel,
   rowMatchesFilter,
+  textCell,
 } from './tables.js';
 import { interpolateLookup, lookupCellOf } from './interpolate.js';
 import type {
@@ -137,6 +139,20 @@ interface TableFieldBinding {
 }
 
 /**
+ * One table select whose row key is read from a text column of a parent
+ * select's row. Choosing a parent row sets this select; choosing this select
+ * by hand clears the parent so the custom value stands.
+ */
+interface SelectFieldBinding {
+  readonly variable: TableSelectVariableDefinition;
+  /** Table the parent select reads, where the key column lives. */
+  readonly parentTable: TableDefinition;
+  /** Text column of the parent table that holds this select's row key. */
+  readonly column: TableColumn;
+  readonly selectName: string;
+}
+
+/**
  * Compares two calculator values, treating very small numeric differences as
  * equal so decimal conversions and repeated formulas do not cause extra
  * compute rounds. Strings and nulls are equal only to themselves.
@@ -201,6 +217,8 @@ export class CalculatorRuntime {
   private readonly tableSelects = new Map<string, TableSelectBinding>();
   private readonly tableFields = new Map<string, TableFieldBinding>();
   private readonly tableFieldsBySelect = new Map<string, TableFieldBinding[]>();
+  private readonly selectFields = new Map<string, SelectFieldBinding>();
+  private readonly selectFieldsBySelect = new Map<string, SelectFieldBinding[]>();
   private equivalentGroups: readonly (readonly string[])[] = [];
 
   /** Settings the variable list was built from. */
@@ -293,6 +311,8 @@ export class CalculatorRuntime {
     this.tableSelects.clear();
     this.tableFields.clear();
     this.tableFieldsBySelect.clear();
+    this.selectFields.clear();
+    this.selectFieldsBySelect.clear();
 
     const nextValues: CalcState = {};
     for (const variable of this.variableList) {
@@ -664,6 +684,12 @@ export class CalculatorRuntime {
 
     for (const field of this.tableFieldsBySelect.get(name) ?? []) {
       this.pinnedNames.delete(field.variable.name);
+    }
+    for (const field of this.selectFieldsBySelect.get(name) ?? []) {
+      this.pinnedNames.delete(field.variable.name);
+    }
+    if (this.selectFields.has(name)) {
+      this.prepareSelectFieldEdit(name, normalized);
     }
     this.setValue(name, normalized);
   }
@@ -1148,6 +1174,46 @@ export class CalculatorRuntime {
       siblings.push(binding);
       this.tableFieldsBySelect.set(selectName, siblings);
     }
+
+    for (const variable of this.variableList) {
+      if (!isTableSelectVariable(variable)) {
+        continue;
+      }
+      const selectName = variable.tableSelect;
+      const fieldKey = variable.tableField;
+      if (selectName === undefined || fieldKey === undefined) {
+        continue;
+      }
+      const parent = this.tableSelects.get(selectName);
+      if (parent === undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} references unknown table select "${selectName}".`,
+        );
+      }
+      const column = findColumn(parent.table, fieldKey);
+      if (column === undefined) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} references unknown column "${fieldKey}" in ` +
+            `table "${parent.table.id}".`,
+        );
+      }
+      if (!isTextColumn(column)) {
+        throw new CalculatorDefinitionError(
+          `${variable.label} must read a text column; "${fieldKey}" is not ` +
+            'text.',
+        );
+      }
+      const binding: SelectFieldBinding = {
+        variable,
+        parentTable: parent.table,
+        column,
+        selectName,
+      };
+      this.selectFields.set(variable.name, binding);
+      const siblings = this.selectFieldsBySelect.get(selectName) ?? [];
+      siblings.push(binding);
+      this.selectFieldsBySelect.set(selectName, siblings);
+    }
   }
 
   /**
@@ -1164,6 +1230,9 @@ export class CalculatorRuntime {
       }
       const key = variable.default;
       if (key === undefined) {
+        continue;
+      }
+      if (this.selectFields.has(variable.name)) {
         continue;
       }
       if ((this.tableFieldsBySelect.get(variable.name) ?? []).length > 0) {
@@ -1778,6 +1847,10 @@ export class CalculatorRuntime {
    * standard point (no axis variable) still identifies a row.
    */
   private deriveSelectionKey(binding: TableSelectBinding): string | null {
+    const selectField = this.selectFields.get(binding.variable.name);
+    if (selectField !== undefined) {
+      return this.deriveSelectFieldKey(selectField);
+    }
     const constraints = (
       this.tableFieldsBySelect.get(binding.variable.name) ?? []
     )
@@ -1812,6 +1885,35 @@ export class CalculatorRuntime {
     }
     const [match] = matches;
     return match === undefined ? null : rowKey(binding.table, match);
+  }
+
+  /**
+   * Row key a select reads from its parent select's row. Returns null when no
+   * parent row is chosen, the cell is empty, or the named row is missing from
+   * this select's own table (or hidden by its filter).
+   */
+  private deriveSelectFieldKey(binding: SelectFieldBinding): string | null {
+    const parentKey = this.selectedKey(binding.selectName);
+    if (parentKey === null) {
+      return null;
+    }
+    const parentRow = findRow(binding.parentTable, parentKey);
+    if (parentRow === undefined) {
+      return null;
+    }
+    const key = textCell(parentRow[binding.column.key]);
+    if (key === null) {
+      return null;
+    }
+    const own = this.tableSelects.get(binding.variable.name);
+    if (own === undefined) {
+      return null;
+    }
+    const row = findRow(own.table, key);
+    if (row === undefined || !rowMatchesFilter(row, binding.variable.filter)) {
+      return null;
+    }
+    return key;
   }
 
   private deriveTableFieldValue(binding: TableFieldBinding): number | null {
@@ -1958,6 +2060,46 @@ export class CalculatorRuntime {
       this.values[sibling.variable.name] = null;
       this.pinnedNames.delete(sibling.variable.name);
       this.missingNeeds.delete(sibling.variable.name);
+    }
+    for (const sibling of this.selectFieldsBySelect.get(binding.selectName) ??
+      []) {
+      this.values[sibling.variable.name] = null;
+      this.pinnedNames.delete(sibling.variable.name);
+      this.missingNeeds.delete(sibling.variable.name);
+    }
+  }
+
+  /**
+   * A user picks one row of a select that is driven by a parent select. When
+   * the parent no longer implies that row, clear the parent and everything it
+   * supplies so the hand-picked value stands as a custom choice.
+   */
+  private prepareSelectFieldEdit(name: string, key: string | null): void {
+    const binding = this.selectFields.get(name);
+    if (binding === undefined) {
+      return;
+    }
+    if (this.deriveSelectFieldKey(binding) === key) {
+      return;
+    }
+    this.clearSelectDerived(binding.selectName);
+  }
+
+  /**
+   * Clears a select and every value derived from its row, unpinning them so
+   * the next recompute refills whatever the remaining inputs imply.
+   */
+  private clearSelectDerived(name: string): void {
+    this.values[name] = null;
+    this.pinnedNames.delete(name);
+    this.missingNeeds.delete(name);
+    for (const field of this.tableFieldsBySelect.get(name) ?? []) {
+      this.values[field.variable.name] = null;
+      this.pinnedNames.delete(field.variable.name);
+      this.missingNeeds.delete(field.variable.name);
+    }
+    for (const field of this.selectFieldsBySelect.get(name) ?? []) {
+      this.clearSelectDerived(field.variable.name);
     }
   }
 

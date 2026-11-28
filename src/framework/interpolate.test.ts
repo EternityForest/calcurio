@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   interpolateAt,
   interpolateLookup,
+  invertLookup,
   lookupCellOf,
   parseLookupCell,
 } from './interpolate.js';
@@ -186,5 +187,72 @@ describe('interpolateLookup', () => {
     const cell = parseLookupCell('100@25; 200@75; 7');
     expect(cell).not.toBeNull();
     expect(interpolateLookup(cell!, [null], [null])).toBe(7);
+  });
+});
+
+describe('invertLookup', () => {
+  it('inverts a straight one-dimensional line', () => {
+    const cell = parseLookupCell('0@0; 20@10');
+    expect(cell).not.toBeNull();
+    expect(invertLookup(cell!, 0, [null], [null], 10)).toBeCloseTo(5, 9);
+    expect(invertLookup(cell!, 0, [null], [null], 0)).toBeCloseTo(0, 9);
+    expect(invertLookup(cell!, 0, [null], [null], 20)).toBeCloseTo(10, 9);
+  });
+
+  it('inverts a monotone curve through interpolated points', () => {
+    const cell = parseLookupCell('3.0@0; 3.4@20; 3.7@50; 4.0@80; 4.2@100');
+    expect(cell).not.toBeNull();
+    for (const percent of [10, 35, 65, 90]) {
+      const voltage = interpolateLookup(cell!, [percent], [null]);
+      expect(voltage).not.toBeNull();
+      expect(invertLookup(cell!, 0, [null], [null], voltage!)).toBeCloseTo(
+        percent,
+        6,
+      );
+    }
+  });
+
+  it('clamps to the nearest end outside the sampled range', () => {
+    const cell = parseLookupCell('0@0; 20@10');
+    expect(cell).not.toBeNull();
+    expect(invertLookup(cell!, 0, [null], [null], -5)).toBe(0);
+    expect(invertLookup(cell!, 0, [null], [null], 100)).toBe(10);
+  });
+
+  it('inverts one axis of a two-dimensional cell', () => {
+    const cell = parseLookupCell('10@0,0; 20@10,0; 30@0,10; 40@10,10');
+    expect(cell).not.toBeNull();
+    // Solving axis 0 with axis 1 fixed at 5: value 25 sits at axis0 = 5.
+    expect(invertLookup(cell!, 0, [null, 5], [null, null], 25)).toBeCloseTo(
+      5,
+      9,
+    );
+    // Solving axis 1 with axis 0 fixed at 10.
+    expect(invertLookup(cell!, 1, [10, null], [null, null], 35)).toBeCloseTo(
+      7.5,
+      9,
+    );
+  });
+
+  it('fills a fixed axis from its standard', () => {
+    const cell = parseLookupCell('10@0,25; 30@10,25');
+    expect(cell).not.toBeNull();
+    expect(invertLookup(cell!, 0, [null, null], [null, 25], 20)).toBeCloseTo(
+      5,
+      9,
+    );
+  });
+
+  it('returns null when a fixed axis has no value', () => {
+    const cell = parseLookupCell('10@0,0; 20@10,0; 30@0,10; 40@10,10');
+    expect(cell).not.toBeNull();
+    expect(invertLookup(cell!, 0, [null, null], [null, null], 25)).toBeNull();
+  });
+
+  it('returns null for a fallback-only cell or an unknown axis', () => {
+    expect(invertLookup({ points: [], fallback: 3 }, 0, [], [], 3)).toBeNull();
+    const cell = parseLookupCell('0@0; 20@10');
+    expect(invertLookup(cell!, 2, [null], [null], 10)).toBeNull();
+    expect(invertLookup(cell!, 0, [null], [null], Number.NaN)).toBeNull();
   });
 });

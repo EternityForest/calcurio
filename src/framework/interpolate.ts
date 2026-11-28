@@ -287,6 +287,112 @@ export function interpolateLookup(
 }
 
 /**
+ * Finds the coordinate along one axis that makes a lookup cell produce a
+ * target value: the inverse of `interpolateLookup`. Every axis except
+ * `axisIndex` must be supplied, either as a coordinate or as a standard, so a
+ * two-dimensional cell needs values for all but the one axis being solved.
+ *
+ * The axis range is taken from the cell's samples and bisected `iterations`
+ * times, assuming the cell varies monotonically along the axis. When the
+ * target lies outside the sampled range the nearer end of the range is
+ * returned. Returns null when the cell has no samples along the axis, a
+ * required coordinate is missing, or the target is not finite.
+ */
+export function invertLookup(
+  cell: LookupCell,
+  axisIndex: number,
+  coords: readonly (number | null)[],
+  standards: readonly (number | null)[],
+  target: number,
+  iterations = 40,
+): number | null {
+  if (cell.points.length === 0 || !Number.isFinite(target)) {
+    return null;
+  }
+
+  let dimension = Math.max(coords.length, standards.length);
+  for (const point of cell.points) {
+    dimension = Math.max(dimension, point.coords.length);
+  }
+  if (dimension === 0 || axisIndex < 0 || axisIndex >= dimension) {
+    return null;
+  }
+
+  const fixed: (number | null)[] = [];
+  for (let index = 0; index < dimension; index += 1) {
+    if (index === axisIndex) {
+      fixed.push(null);
+      continue;
+    }
+    const value = coords[index] ?? standards[index] ?? null;
+    if (value === null) {
+      return null;
+    }
+    fixed.push(value);
+  }
+
+  let low = Number.POSITIVE_INFINITY;
+  let high = Number.NEGATIVE_INFINITY;
+  for (const point of cell.points) {
+    const axis = point.coords[axisIndex] ?? standards[axisIndex] ?? null;
+    if (axis === null) {
+      continue;
+    }
+    if (axis < low) {
+      low = axis;
+    }
+    if (axis > high) {
+      high = axis;
+    }
+  }
+  if (!Number.isFinite(low) || !Number.isFinite(high)) {
+    return null;
+  }
+  if (low === high) {
+    return low;
+  }
+
+  const evaluate = (axisValue: number): number | null => {
+    const query = fixed.slice();
+    query[axisIndex] = axisValue;
+    return interpolateLookup(cell, query, standards);
+  };
+
+  const lowValue = evaluate(low);
+  const highValue = evaluate(high);
+  if (lowValue === null || highValue === null) {
+    return null;
+  }
+
+  // Outside the sampled range the nearer end is the best available fit.
+  const smallest = Math.min(lowValue, highValue);
+  const largest = Math.max(lowValue, highValue);
+  if (target <= smallest) {
+    return lowValue <= highValue ? low : high;
+  }
+  if (target >= largest) {
+    return lowValue >= highValue ? low : high;
+  }
+
+  const increasing = highValue >= lowValue;
+  let lo = low;
+  let hi = high;
+  for (let step = 0; step < iterations; step += 1) {
+    const mid = (lo + hi) / 2;
+    const midValue = evaluate(mid);
+    if (midValue === null) {
+      return null;
+    }
+    if (increasing ? midValue < target : midValue > target) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
+/**
  * Bilinear interpolation over two-dimensional samples on a rectilinear grid.
  * A single row or column degenerates to one-dimensional interpolation; a
  * missing grid corner falls back to the nearest sample. Query points outside

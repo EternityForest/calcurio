@@ -31,29 +31,6 @@ function divideOrNull(
   return numerator / denominator;
 }
 
-/**
- * The cell voltage the current state implies, or null when it cannot be found:
- * the pack voltage divided by the cell count, else the chemistry curve at the
- * given charge.
- */
-function impliedCellVoltage(
-  state: Readonly<CalcState>,
-  type: ReturnType<typeof findBatteryType>,
-): number | null {
-  const temperature = valueOf(state, 'temperature') ?? REFERENCE_TEMPERATURE;
-  const fromPack = divideOrNull(
-    valueOf(state, 'packVoltage'),
-    valueOf(state, 'cells'),
-  );
-  if (fromPack !== null) {
-    return fromPack;
-  }
-  const soc = valueOf(state, 'soc');
-  if (soc !== null && type !== null) {
-    return cellVoltageAt(type, soc, temperature);
-  }
-  return null;
-}
 
 export const batteryStateOfCharge: CalculatorDefinition = {
   id: 'battery-state-of-charge',

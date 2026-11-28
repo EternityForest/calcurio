@@ -142,20 +142,20 @@ export const batteryStateOfCharge: CalculatorDefinition = {
         }
         const temperature =
           valueOf(state, 'temperature') ?? REFERENCE_TEMPERATURE;
-        const cellVoltage = valueOf(state, 'cellVoltage');
         const cells = valueOf(state, 'cells');
         const packVoltage = valueOf(state, 'packVoltage');
-        const volts = cellVoltage ?? divideOrNull(packVoltage, cells);
-        if (volts === null) {
           const needs: string[] = [];
-          if (cellVoltage === null && packVoltage === null) {
-            needs.push('cellVoltage');
+          if (packVoltage === null) {
+            needs.push('packVoltage');
           }
-          if (cellVoltage === null && cells === null) {
+          if (cells === null) {
             needs.push('cells');
           }
+          if(needs.length>0){
           return missing(needs);
-        }
+          }
+        const volts = packVoltage!/cells!;
+
         const result = stateOfChargeAt(type, volts, temperature);
         return result === null ? missing([]) : result;
       },
@@ -166,31 +166,22 @@ export const batteryStateOfCharge: CalculatorDefinition = {
       unit: 'V',
       defaultDisplayUnit: 'mV',
       description: 'Resting voltage of one cell.',
-      validate: (state) => {
-        const voltage = valueOf(state, 'cellVoltage');
-        return voltage !== null && voltage <= 0
-          ? 'Cell voltage must be greater than zero.'
-          : undefined;
-      },
+      editable: false,
       computable: (state) => {
-        const chemistry = state['chemistry'];
-        const type =
-          typeof chemistry === 'string' ? findBatteryType(chemistry) : null;
-        const volts = impliedCellVoltage(state, type);
-        if (volts !== null) {
-          return volts;
-        }
-        if (typeof chemistry !== 'string') {
-          return missing(['chemistry']);
-        }
-        if (type === null) {
-          return missing([]);
-        }
-        return missing([
-          ...(valueOf(state, 'soc') === null ? ['soc'] : []),
-          ...(valueOf(state, 'packVoltage') === null ? ['packVoltage'] : []),
-          ...(valueOf(state, 'cells') === null ? ['cells'] : []),
-        ]);
+          const cells = valueOf(state, 'cells');
+        const packVoltage = valueOf(state, 'packVoltage');
+          const needs: string[] = [];
+          if (packVoltage === null) {
+            needs.push('packVoltage');
+          }
+          if (cells === null) {
+            needs.push('cells');
+          }
+          if(needs.length>0){
+          return missing(needs);
+          }
+        const volts = packVoltage!/cells!;
+        return volts;
       },
     },
     {
@@ -210,10 +201,7 @@ export const batteryStateOfCharge: CalculatorDefinition = {
         if (cells === null) {
           return missing(['cells']);
         }
-        const cellVoltage = valueOf(state, 'cellVoltage');
-        if (cellVoltage !== null) {
-          return cellVoltage * cells;
-        }
+
         const chemistry = state['chemistry'];
         if (typeof chemistry !== 'string') {
           return missing(['chemistry']);

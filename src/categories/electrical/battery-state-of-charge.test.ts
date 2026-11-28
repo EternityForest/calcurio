@@ -42,13 +42,6 @@ describe('battery state of charge', () => {
     expect(rt.state['packVoltage']).toBeCloseTo(3.55, 6);
   });
 
-  it('inverts a cell voltage back to the charge', () => {
-    const rt = runtime();
-    rt.setSelection('commonBattery', '18650');
-    rt.setDisplayUnit('cellVoltage', 'V');
-    rt.setDisplayText('cellVoltage', '3.95');
-    expect(rt.state['soc']).toBeCloseTo(75, 6);
-  });
 
   it('divides a pack voltage by the cell count', () => {
     const rt = runtime();

@@ -169,7 +169,7 @@ describe('CalcApp', () => {
 
     button(element, 'back').click();
     await element.updateComplete;
-    expect(element.textContent).toContain('Choose a category');
+    expect(element.textContent).toContain('Calculators');
   });
 
   it('shows a load error and retries', async () => {

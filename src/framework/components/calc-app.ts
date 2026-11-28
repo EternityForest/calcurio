@@ -39,9 +39,52 @@ type View =
       readonly tableId: string;
     };
 
+/** Parses a hash fragment into a View, or returns null if the format is unrecognised. */
+function parseHash(hash: string): View | null {
+  if (hash.startsWith('#')) hash = hash.slice(1);
+  if (hash === '' || hash === '/') return { kind: 'categories' };
+
+  if(hash.startsWith("/")) {
+    hash= hash.slice(1);
+  }
+  const parts = hash.split('/');
+  if (parts.length < 2) return null;
+  switch (parts[0]) {
+    case 'category':
+      return { kind: 'category', categoryId: parts[1] ?? '' };
+    case 'calculator':
+      if (parts.length >= 3) {
+        return { kind: 'calculator', categoryId: parts[1] ?? '', calculatorId: parts[2] ?? '' };
+      }
+      return null;
+    case 'table':
+      if (parts.length >= 3) {
+        return { kind: 'table', categoryId: parts[1] ?? '', tableId: parts[2] ?? '' };
+      }
+      return null;
+    default:
+      return null;
+  }
+}
+
+/** Serialises a View into a hash fragment. */
+function viewToHash(view: View): string {
+  switch (view.kind) {
+    case 'categories':
+      return '#';
+    case 'category':
+      return `#/category/${view.categoryId}`;
+    case 'calculator':
+      return `#/calculator/${view.categoryId}/${view.calculatorId}`;
+    case 'table':
+      return `#/table/${view.categoryId}/${view.tableId}`;
+  }
+}
+
 /**
  * Embeddable widget root. Shows the category list, lazily loads a category
- * when it is opened, then shows its calculators.
+ * when it is opened, then shows its calculators. Uses a navigation stack
+ * backed by the browser history so the back button works naturally.
  */
 export class CalcApp extends LitElement {
   static override properties = {
@@ -50,13 +93,15 @@ export class CalcApp extends LitElement {
 
   declare app: CalculatorApp<CategoryManifest> | undefined;
 
-  private view: View = { kind: 'categories' };
+  /** Navigation history stack. The top is always the current view. */
+  private history: View[] = [];
   private loadingCategoryId: string | null = null;
   private loadError = '';
   private bookmarkStore: BookmarkStore | null = null;
   private tableRowStore: TableRowStore | null = null;
   private bookmarksInitialized = false;
   private readonly runtimes = new Map<string, CachedRuntime>();
+  private popStateHandler: (() => void) | null = null;
 
   override createRenderRoot(): HTMLElement {
     return this;
@@ -69,6 +114,45 @@ export class CalcApp extends LitElement {
       const storage = browserLocalStorage();
       this.bookmarkStore = storage === null ? null : new BookmarkStore(storage);
       this.tableRowStore = storage === null ? null : new TableRowStore(storage);
+    }
+    // Initialise history from the current hash.
+    const initialView = parseHash(window.location.hash);
+    if (initialView !== null && initialView.kind !== 'categories') {
+      // Landing on a deep link — push categories as the base so the back
+      // button is visible and usable.
+      this.history.push({ kind: 'categories' });
+      this.history.push(initialView);
+      this.view = initialView;
+      // Trigger lazy loading for the category behind a deep-linked view.
+      const categoryId =
+        initialView.kind === 'category'
+          ? initialView.categoryId
+          : initialView.categoryId;
+      void this.loadCategory(categoryId);
+    } else {
+      this.history.push(initialView ?? { kind: 'categories' });
+      this.view = this.history[0]!;
+    }
+    // Listen for browser back/forward buttons.
+    this.popStateHandler = () => {
+      const newView = parseHash(window.location.hash);
+      if (newView !== null && newView.kind !== this.view.kind) {
+        // Browser navigated — pop our stack to match and restore the target view.
+        while (this.history.length > 1 && this.history[this.history.length - 1].kind !== newView.kind) {
+          this.history.pop();
+        }
+        this.view = this.history[this.history.length - 1]!;
+        this.requestUpdate();
+      }
+    };
+    window.addEventListener('popstate', this.popStateHandler);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.popStateHandler !== null) {
+      window.removeEventListener('popstate', this.popStateHandler);
+      this.popStateHandler = null;
     }
   }
 
@@ -99,20 +183,16 @@ export class CalcApp extends LitElement {
   }
 
   private renderBackButton(): TemplateResult | typeof nothing {
-    if (this.view.kind === 'categories') {
+    if (this.history.length <= 1) {
       return nothing;
     }
     const label = this.view.kind === 'category' ? 'All categories' : 'Back';
-    const target: View =
-      this.view.kind === 'category'
-        ? { kind: 'categories' }
-        : { kind: 'category', categoryId: this.view.categoryId };
     return html`
       <button
         class="button"
         type="button"
         data-testid="back"
-        @click=${() => this.showView(target)}
+        @click=${() => this.popView()}
       >
         ← ${label}
       </button>
@@ -422,26 +502,38 @@ export class CalcApp extends LitElement {
     return runtime;
   }
 
+  /** Push a new view onto the stack and update the URL. */
+  private pushView(view: View): void {
+    this.history.push(view);
+    this.view = view;
+    window.location.hash = viewToHash(view);
+    this.requestUpdate();
+  }
+
+  /** Pop the top view and restore the previous one, updating the URL. */
+  private popView(): void {
+    if (this.history.length <= 1) return;
+    this.history.pop();
+    const previous = this.history[this.history.length - 1]!;
+    this.view = previous;
+    window.location.hash = viewToHash(previous);
+    this.requestUpdate();
+  }
+
   private openCategory(categoryId: string): void {
-    this.view = { kind: 'category', categoryId };
+    this.pushView({ kind: 'category', categoryId });
     this.loadError = '';
     this.requestUpdate();
     void this.loadCategory(categoryId);
   }
 
   private openCalculator(categoryId: string, calculatorId: string): void {
-    this.view = { kind: 'calculator', categoryId, calculatorId };
+    this.pushView({ kind: 'calculator', categoryId, calculatorId });
     this.requestUpdate();
   }
 
   private openTable(categoryId: string, tableId: string): void {
-    this.view = { kind: 'table', categoryId, tableId };
-    this.requestUpdate();
-  }
-
-  private showView(view: View): void {
-    this.view = view;
-    this.loadError = '';
+    this.pushView({ kind: 'table', categoryId, tableId });
     this.requestUpdate();
   }
 

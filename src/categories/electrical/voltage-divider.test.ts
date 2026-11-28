@@ -27,6 +27,24 @@ describe('Voltage divider', () => {
     expect(calc.errors).toEqual([]);
   });
 
+  it('subtracts the load current drop from the output voltage', () => {
+    const calc = new CalculatorRuntime(voltageDivider, registry);
+    calc.setSelection('r1Select', '1k');
+    calc.setSelection('r2Select', '2.2k');
+    calc.setDisplayText('vin', '12');
+    calc.setDisplayText('loadCurrent', '1000');
+    expect(calc.state['loadCurrent']).toBeCloseTo(0.001, 12);
+    expect(calc.state['vout']).toBeCloseTo(7.5625, 9);
+    expect(calc.state['ratio']).toBeCloseTo(0.6875, 9);
+  });
+
+  it('starts the load current at zero microamps', () => {
+    const calc = new CalculatorRuntime(voltageDivider, registry);
+    expect(calc.displayUnitFor('loadCurrent')).toBe('uA');
+    expect(calc.state['loadCurrent']).toBe(0);
+    expect(calc.variable('loadCurrent').label).toBe('Load current');
+  });
+
   it('accepts typed resistances with no table match', () => {
     const calc = new CalculatorRuntime(voltageDivider, registry);
     calc.setDisplayText('r1', '1234');

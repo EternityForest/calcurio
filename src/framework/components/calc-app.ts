@@ -143,12 +143,13 @@ export class CalcApp extends LitElement {
     this.popStateHandler = () => {
       const newView = parseHash(window.location.hash);
       if (newView !== null && newView.kind !== this.view.kind) {
-        // Browser navigated — pop our stack to match and restore the target view.
-        const top = this.history[this.history.length - 1]!;
-        while (this.history.length > 1 && top.kind !== newView.kind) {
+        // Browser navigated — pop our stack by one level to match,
+        // then sync the URL. This mirrors the toolbar back button behavior.
+        if (this.history.length > 1) {
           this.history.pop();
         }
         this.view = this.history[this.history.length - 1]!;
+        window.location.hash = viewToHash(this.view);
         this.requestUpdate();
       }
     };

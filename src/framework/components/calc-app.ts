@@ -102,6 +102,7 @@ export class CalcApp extends LitElement {
   private bookmarksInitialized = false;
   private readonly runtimes = new Map<string, CachedRuntime>();
   private popStateHandler: (() => void) | null = null;
+  private pendingCategoryId: string | null = null;
 
   override createRenderRoot(): HTMLElement {
     return this;
@@ -128,7 +129,11 @@ export class CalcApp extends LitElement {
         initialView.kind === 'category'
           ? initialView.categoryId
           : initialView.categoryId;
-      void this.loadCategory(categoryId);
+      if (this.app !== undefined) {
+        void this.loadCategory(categoryId);
+      } else {
+        this.pendingCategoryId = categoryId;
+      }
     } else {
       this.history.push(initialView ?? { kind: 'categories' });
       this.view = this.history[0]!;
@@ -153,6 +158,14 @@ export class CalcApp extends LitElement {
     if (this.popStateHandler !== null) {
       window.removeEventListener('popstate', this.popStateHandler);
       this.popStateHandler = null;
+    }
+  }
+
+  override updated(): void {
+    if (this.pendingCategoryId !== null && this.app !== undefined) {
+      const categoryId = this.pendingCategoryId;
+      this.pendingCategoryId = null;
+      void this.loadCategory(categoryId);
     }
   }
 
@@ -538,7 +551,11 @@ export class CalcApp extends LitElement {
   }
 
   private async loadCategory(categoryId: string): Promise<void> {
-    const handle = this.app?.categories[categoryId];
+    if (this.app === undefined) {
+      this.pendingCategoryId = categoryId;
+      return;
+    }
+    const handle = this.app.categories[categoryId];
     if (handle === undefined || handle.isLoaded) {
       return;
     }

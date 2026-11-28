@@ -3,7 +3,10 @@ import type {
   TableSource,
 } from '../../framework/types.js';
 import { ampHoursTimeAmps } from './amp-hours-time-amps.js';
+import { batteryStateOfCharge } from './battery-state-of-charge.js';
+import { batteryTypesTable } from '../../models/battery-types.js';
 import { capacitorStoredEnergy } from './capacitor-stored-energy.js';
+import { commonBatteriesTable } from '../../models/common-batteries.js';
 import { capacitorTypesTable } from '../../models/capacitor-types.js';
 import { energyWattsTime } from './energy-watts-time.js';
 import { inductorStoredEnergy } from './inductor-stored-energy.js';
@@ -32,6 +35,8 @@ export const tables: readonly TableSource[] = [
   eSeriesCapacitors,
   wireGaugeTable,
   wireMetalsTable,
+  batteryTypesTable,
+  commonBatteriesTable,
 ];
 
 export const calculators: readonly CalculatorDefinition[] = [
@@ -52,4 +57,5 @@ export const calculators: readonly CalculatorDefinition[] = [
   energyWattsTime,
   capacitorStoredEnergy,
   inductorStoredEnergy,
+  batteryStateOfCharge,
 ];
